@@ -1,0 +1,11 @@
+syntax = "proto3";
+package google.api;
+
+message HttpRule {
+  string get = 2;
+  string post = 4;
+  string put = 5;
+  string delete = 6;
+  string patch = 7;
+  string body = 8;
+}
