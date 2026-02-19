@@ -47,7 +47,7 @@ impl testcontainers::Image for SpiceDbImage {
     }
 
     fn cmd(&self) -> impl IntoIterator<Item = impl Into<Cow<'_, str>>> {
-        vec!["serve", "--grpc-no-tls"]
+        vec!["serve"]
     }
 
     fn expose_ports(&self) -> &[testcontainers::core::ContainerPort] {
