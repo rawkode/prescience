@@ -1,0 +1,12 @@
+syntax = "proto3";
+package grpc.gateway.protoc_gen_openapiv2.options;
+
+import "google/protobuf/descriptor.proto";
+
+message Operation {
+  repeated string tags = 1;
+}
+
+extend google.protobuf.MethodOptions {
+  Operation openapiv2_operation = 1042;
+}

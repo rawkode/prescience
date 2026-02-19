@@ -1,0 +1,3 @@
+[submodule "proto/authzed-api"]
+	path = proto/authzed-api
+	url = https://github.com/authzed/api.git

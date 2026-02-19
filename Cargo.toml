@@ -1,0 +1,35 @@
+[package]
+name = "prescience"
+version = "0.1.0"
+edition = "2021"
+description = "An idiomatic Rust client library for SpiceDB"
+license = "Apache-2.0"
+repository = "https://github.com/rawkode/prescience"
+keywords = ["spicedb", "authzed", "authorization", "zanzibar", "grpc"]
+categories = ["authentication", "api-bindings"]
+
+[features]
+default = []
+watch = []
+experimental = []
+serde = ["dep:serde"]
+tls-rustls = ["tonic/tls-webpki-roots"]
+tls-native = ["tonic/tls"]
+
+[dependencies]
+futures-core = "0.3"
+prost = "0.13"
+prost-types = "0.13"
+serde = { version = "1", features = ["derive"], optional = true }
+thiserror = "2"
+tokio = { version = "1", features = ["macros"] }
+tokio-stream = "0.1"
+tonic = { version = "0.12", features = ["transport"] }
+tower = "0.5"
+tracing = "0.1"
+
+[build-dependencies]
+tonic-build = "0.12"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

@@ -1,0 +1,21 @@
+# Rust build artifacts
+/target/
+
+# Nix/devenv
+.devenv/
+.devenv.flake.nix
+.pre-commit-config.yaml
+
+# direnv
+.direnv/
+
+# OS files
+.DS_Store
+
+# Editor
+*.swp
+*.swo
+*~
+
+# Test binary (remove later)
+test2

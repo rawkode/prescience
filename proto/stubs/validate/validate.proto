@@ -1,0 +1,54 @@
+syntax = "proto3";
+package validate;
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FieldOptions {
+  optional FieldRules rules = 1170;
+}
+
+extend google.protobuf.OneofOptions {
+  optional bool required = 1170;
+}
+
+message FieldRules {
+  StringRules string = 12;
+  BoolRules bool = 13;
+  EnumRules enum = 16;
+  RepeatedRules repeated = 18;
+  MessageRules message = 17;
+  UInt32Rules uint32 = 5;
+}
+
+message StringRules {
+  string pattern = 2;
+  uint64 max_bytes = 4;
+  uint64 min_bytes = 3;
+}
+
+message BoolRules {
+  bool const = 1;
+}
+
+message EnumRules {
+  bool defined_only = 1;
+  repeated int32 not_in = 3;
+}
+
+message RepeatedRules {
+  uint64 min_items = 1;
+  ItemRules items = 3;
+}
+
+message ItemRules {
+  StringRules string = 12;
+  MessageRules message = 17;
+}
+
+message MessageRules {
+  bool required = 1;
+}
+
+message UInt32Rules {
+  uint32 gte = 5;
+}

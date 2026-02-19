@@ -1,0 +1,60 @@
+syntax = "proto3";
+package buf.validate;
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FieldOptions {
+  optional FieldConstraints field = 1071;
+}
+
+extend google.protobuf.OneofOptions {
+  optional OneofConstraints oneof = 1071;
+}
+
+message FieldConstraints {
+  bool required = 25;
+  StringRules string = 14;
+  UInt32Rules uint32 = 5;
+  BoolRules bool = 13;
+  EnumRules enum = 16;
+  RepeatedRules repeated = 18;
+  MessageConstraints message = 17;
+}
+
+message OneofConstraints {
+  bool required = 1;
+}
+
+message StringRules {
+  string pattern = 2;
+  uint64 max_bytes = 4;
+  uint64 min_bytes = 3;
+}
+
+message UInt32Rules {
+  uint32 gte = 5;
+}
+
+message BoolRules {
+  bool const = 1;
+}
+
+message EnumRules {
+  bool defined_only = 1;
+  repeated int32 not_in = 3;
+}
+
+message RepeatedRules {
+  uint64 min_items = 1;
+  ItemConstraints items = 3;
+}
+
+message ItemConstraints {
+  bool required = 25;
+  StringRules string = 14;
+  MessageConstraints message = 17;
+}
+
+message MessageConstraints {
+  bool required = 1;
+}
