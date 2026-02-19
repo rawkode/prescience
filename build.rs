@@ -26,6 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tonic_build::configure()
         .build_server(false)
+        .extern_path(".google.rpc.Status", "crate::proto::google::rpc::Status")
         .compile_protos(&proto_paths, includes)?;
 
     // Rerun if proto files change
