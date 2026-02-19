@@ -59,15 +59,27 @@ impl testcontainers::Image for SpiceDbImage {
 
 // ── Shared container ──────────────────────────────────────────
 
+/// Holds the running container and its mapped port.
+/// The `Client` is NOT shared because each `#[tokio::test]` creates its
+/// own tokio runtime, and tonic `Channel` is tied to the runtime that
+/// created it. Sharing a single Channel across runtimes causes transport
+/// errors. Instead we share only the container and create a fresh Client
+/// per test invocation.
 struct SharedSpiceDb {
     _container: ContainerAsync<SpiceDbImage>,
-    client: Client,
+    port: u16,
+    schema_written: bool,
 }
 
 static SPICEDB: OnceCell<Arc<SharedSpiceDb>> = OnceCell::const_new();
 
-async fn spicedb() -> Arc<SharedSpiceDb> {
-    SPICEDB
+/// Returns a fresh `Client` connected to the shared SpiceDB container.
+/// The container is started once (lazily) and the schema is written on
+/// first access. Each call creates a new tonic Channel on the caller's
+/// runtime, avoiding cross-runtime transport errors.
+async fn spicedb() -> Client {
+    // Ensure container is started and schema is written (once)
+    let shared = SPICEDB
         .get_or_init(|| async {
             let container = SpiceDbImage
                 .start()
@@ -123,11 +135,19 @@ async fn spicedb() -> Arc<SharedSpiceDb> {
 
             Arc::new(SharedSpiceDb {
                 _container: container,
-                client,
+                port,
+                schema_written: true,
             })
         })
+        .await;
+
+    assert!(shared.schema_written, "schema should have been written");
+
+    // Create a fresh client on the CURRENT runtime
+    let endpoint = format!("http://localhost:{}", shared.port);
+    Client::new(&endpoint, SPICEDB_TOKEN)
         .await
-        .clone()
+        .expect("failed to create client for test")
 }
 
 const TEST_SCHEMA: &str = r#"
@@ -146,17 +166,17 @@ definition document {
 
 #[tokio::test]
 async fn write_and_read_schema() {
-    let db = spicedb().await;
+    let c = spicedb().await;
 
-    let (schema_text, read_at) = db.client.read_schema().await.expect("read_schema failed");
+    let (schema_text, read_at) = c.read_schema().await.expect("read_schema failed");
     assert!(schema_text.contains("definition document"));
     assert!(!read_at.token().is_empty());
 }
 
 #[tokio::test]
 async fn write_schema_empty_rejected() {
-    let db = spicedb().await;
-    let err = db.client.write_schema("").await.unwrap_err();
+    let c = spicedb().await;
+    let err = c.write_schema("").await.unwrap_err();
     assert!(matches!(err, prescience::Error::InvalidArgument(_)));
 }
 
@@ -164,15 +184,14 @@ async fn write_schema_empty_rejected() {
 
 #[tokio::test]
 async fn write_relationships_empty_rejected() {
-    let db = spicedb().await;
-    let err = db.client.write_relationships(vec![]).await.unwrap_err();
+    let c = spicedb().await;
+    let err = c.write_relationships(vec![]).await.unwrap_err();
     assert!(matches!(err, prescience::Error::InvalidArgument(_)));
 }
 
 #[tokio::test]
 async fn write_and_check_permission() {
-    let db = spicedb().await;
-    let c = &db.client;
+    let c = spicedb().await;
 
     let token = c
         .write_relationships(vec![RelationshipUpdate::create(Relationship::new(
@@ -224,8 +243,7 @@ async fn write_and_check_permission() {
 
 #[tokio::test]
 async fn read_relationships() {
-    let db = spicedb().await;
-    let c = &db.client;
+    let c = spicedb().await;
 
     let token = c
         .write_relationships(vec![
@@ -268,8 +286,7 @@ async fn read_relationships() {
 
 #[tokio::test]
 async fn lookup_resources() {
-    let db = spicedb().await;
-    let c = &db.client;
+    let c = spicedb().await;
 
     let token = c
         .write_relationships(vec![
@@ -320,8 +337,7 @@ async fn lookup_resources() {
 
 #[tokio::test]
 async fn lookup_subjects() {
-    let db = spicedb().await;
-    let c = &db.client;
+    let c = spicedb().await;
 
     let token = c
         .write_relationships(vec![
@@ -364,8 +380,7 @@ async fn lookup_subjects() {
 
 #[tokio::test]
 async fn delete_relationships() {
-    let db = spicedb().await;
-    let c = &db.client;
+    let c = spicedb().await;
 
     let token = c
         .write_relationships(vec![RelationshipUpdate::create(Relationship::new(
@@ -425,8 +440,7 @@ async fn delete_relationships() {
 #[cfg(feature = "watch")]
 #[tokio::test]
 async fn watch_receives_updates() {
-    let db = spicedb().await;
-    let c = &db.client;
+    let c = spicedb().await;
 
     let mut stream = c
         .watch(vec!["document"])
@@ -464,8 +478,7 @@ async fn watch_receives_updates() {
 async fn bulk_check_permissions() {
     use prescience::BulkCheckItem;
 
-    let db = spicedb().await;
-    let c = &db.client;
+    let c = spicedb().await;
 
     let token = c
         .write_relationships(vec![RelationshipUpdate::create(Relationship::new(
