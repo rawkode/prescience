@@ -25,8 +25,9 @@
   };
 
   # Pre-commit hooks for code quality
+  # Note: clippy pre-commit is disabled because it requires a full build
+  # and conflicts with mixed Rust toolchain versions. Run `cargo clippy` manually.
   pre-commit.hooks = {
-    clippy.enable = true;
     rustfmt.enable = true;
   };
 
