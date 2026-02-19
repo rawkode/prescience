@@ -1,12 +1,11 @@
 //! Integration tests against a live SpiceDB instance.
 //!
-//! These tests are `#[ignore]`d by default and run in CI with:
-//!   cargo test --all-features -- --ignored
+//! Requires SpiceDB running locally. To start one:
+//!   spicedb serve --grpc-preshared-key test-key --datastore-engine memory --grpc-no-tls &
 //!
-//! To run locally:
-//!   spicedb serve --grpc-preshared-key test-key --datastore-engine memory &
-//!   SPICEDB_ENDPOINT=http://localhost:50051 SPICEDB_TOKEN=test-key \
-//!     cargo test --all-features -- --ignored
+//! Configure via environment variables (defaults shown):
+//!   SPICEDB_ENDPOINT=http://localhost:50051
+//!   SPICEDB_TOKEN=test-key
 
 use prescience::{
     Client, Consistency, ObjectReference, PermissionResult, Relationship, RelationshipFilter,
@@ -41,7 +40,6 @@ definition document {
 "#;
 
 #[tokio::test]
-#[ignore]
 async fn write_and_read_schema() {
     let c = client().await;
 
@@ -54,7 +52,6 @@ async fn write_and_read_schema() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn write_schema_empty_rejected() {
     let c = client().await;
     let err = c.write_schema("").await.unwrap_err();
@@ -64,7 +61,6 @@ async fn write_schema_empty_rejected() {
 // ── Relationships ─────────────────────────────────────────────
 
 #[tokio::test]
-#[ignore]
 async fn write_and_check_permission() {
     let c = client().await;
     c.write_schema(TEST_SCHEMA).await.unwrap();
@@ -117,7 +113,6 @@ async fn write_and_check_permission() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn read_relationships() {
     let c = client().await;
     c.write_schema(TEST_SCHEMA).await.unwrap();
@@ -165,7 +160,6 @@ async fn read_relationships() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn lookup_resources() {
     let c = client().await;
     c.write_schema(TEST_SCHEMA).await.unwrap();
@@ -218,7 +212,6 @@ async fn lookup_resources() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn lookup_subjects() {
     let c = client().await;
     c.write_schema(TEST_SCHEMA).await.unwrap();
@@ -266,7 +259,6 @@ async fn lookup_subjects() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn delete_relationships() {
     let c = client().await;
     c.write_schema(TEST_SCHEMA).await.unwrap();
@@ -330,7 +322,6 @@ async fn delete_relationships() {
 
 #[cfg(feature = "watch")]
 #[tokio::test]
-#[ignore]
 async fn watch_receives_updates() {
     let c = client().await;
     c.write_schema(TEST_SCHEMA).await.unwrap();
@@ -370,7 +361,6 @@ async fn watch_receives_updates() {
 
 #[cfg(feature = "experimental")]
 #[tokio::test]
-#[ignore]
 async fn bulk_check_permissions() {
     use prescience::BulkCheckItem;
 
