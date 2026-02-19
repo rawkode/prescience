@@ -109,14 +109,23 @@ pub struct SubjectReference {
 impl SubjectReference {
     /// Creates a new `SubjectReference`.
     ///
-    /// Returns `Err` if the underlying `ObjectReference` is invalid.
+    /// Returns `Err` if `optional_relation` is `Some("")` (empty string).
+    /// Use `None` instead to indicate no relation.
     pub fn new(
         object: ObjectReference,
         optional_relation: Option<impl Into<String>>,
     ) -> Result<Self, Error> {
+        let optional_relation = optional_relation.map(Into::into);
+        if let Some(ref rel) = optional_relation {
+            if rel.is_empty() {
+                return Err(Error::InvalidArgument(
+                    "optional_relation must not be empty; use None instead".into(),
+                ));
+            }
+        }
         Ok(Self {
             object,
-            optional_relation: optional_relation.map(Into::into),
+            optional_relation,
         })
     }
 
@@ -207,6 +216,13 @@ mod tests {
         let obj = ObjectReference::new("group", "eng").unwrap();
         let sub = SubjectReference::new(obj, Some("member")).unwrap();
         assert_eq!(sub.optional_relation(), Some("member"));
+    }
+
+    #[test]
+    fn subject_reference_empty_relation_rejected() {
+        let obj = ObjectReference::new("group", "eng").unwrap();
+        let err = SubjectReference::new(obj, Some("")).unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
     }
 
     #[test]

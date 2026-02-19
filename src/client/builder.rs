@@ -73,11 +73,21 @@ impl ClientBuilder {
     /// Builds and connects the client.
     pub async fn build(self) -> Result<Client, Error> {
         // Validate insecure connections (FR-1.3)
+        // Parse the URI to extract the host for proper loopback validation.
+        // Substring matching (e.g. contains("localhost")) is unsafe because
+        // it would allow hosts like "localhost.evil.com".
         if self.endpoint.starts_with("http://") && !self.insecure {
-            // Check if it's a loopback address
-            let is_loopback = self.endpoint.contains("://localhost")
-                || self.endpoint.contains("://127.0.0.1")
-                || self.endpoint.contains("://[::1]");
+            let uri: http::Uri = self
+                .endpoint
+                .parse()
+                .map_err(|e: http::uri::InvalidUri| {
+                    Error::InvalidArgument(format!("invalid endpoint URI: {}", e))
+                })?;
+            let host = uri.host().unwrap_or("");
+            let is_loopback = host == "localhost"
+                || host == "127.0.0.1"
+                || host == "::1"
+                || host == "[::1]";
 
             if !is_loopback {
                 return Err(Error::InvalidArgument(

@@ -133,14 +133,27 @@ where
 {
     /// Sends the client-streaming import request and returns the number of relationships loaded.
     pub async fn send(self) -> Result<u64, Error> {
-        // Each ImportBulkRelationshipsRequest can contain multiple relationships.
-        // We send one relationship per message for simplicity; SpiceDB handles batching internally.
-        let request_stream = self.stream.map(|rel: Relationship| {
-            let proto_rel: proto::Relationship = (&rel).into();
-            proto::ImportBulkRelationshipsRequest {
-                relationships: vec![proto_rel],
+        // Collect all relationships and batch them into chunks to reduce
+        // per-message overhead while keeping memory bounded per message.
+        let batch_size = 128;
+        let request_stream = async_stream::stream! {
+            let mut batch: Vec<proto::Relationship> = Vec::with_capacity(batch_size);
+            let mut stream = std::pin::pin!(self.stream);
+            while let Some(rel) = StreamExt::next(&mut stream).await {
+                batch.push((&rel).into());
+                if batch.len() >= batch_size {
+                    yield proto::ImportBulkRelationshipsRequest {
+                        relationships: std::mem::take(&mut batch),
+                    };
+                    batch = Vec::with_capacity(batch_size);
+                }
             }
-        });
+            if !batch.is_empty() {
+                yield proto::ImportBulkRelationshipsRequest {
+                    relationships: batch,
+                };
+            }
+        };
 
         let response = self
             .client

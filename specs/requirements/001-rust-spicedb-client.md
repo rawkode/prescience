@@ -30,7 +30,7 @@ No UI actors. No end-user-facing surface. This is a library consumed programmati
 ### FR-1: Client Construction & Connection
 
 1. **FR-1.1** — The library MUST provide a client constructor that accepts a SpiceDB endpoint (URI) and a bearer token.
-2. **FR-1.2** — The constructor MUST support TLS-encrypted connections. TLS is determined by URI scheme: `https://` = TLS enabled, `http://` = plaintext. The builder provides a `.tls(bool)` override for explicit control.
+2. **FR-1.2** — The constructor MUST support TLS-encrypted connections. TLS is determined by URI scheme: `https://` = TLS enabled, `http://` = plaintext. For advanced TLS configuration (custom CA certs, mTLS), use `Client::from_channel()` with a pre-configured `tonic::Channel`.
 3. **FR-1.3** — The constructor MUST support plaintext/insecure connections (explicit opt-in) for local development. Attempting `http://` to a non-loopback address without explicit `.insecure(true)` on the builder MUST return `Err(Error::InvalidArgument(...))` with a message indicating that insecure connections to remote addresses require explicit opt-in. No warning-log-and-proceed behavior. (Rationale: fail-closed is safer. Consistent with the error-handling approach.)
 4. **FR-1.4** — The client MUST reuse the underlying `tonic::Channel` across calls (connection pooling via channel reuse).
 5. **FR-1.5** — The client SHOULD accept an externally-constructed `tonic::Channel` for advanced use cases (custom interceptors, load balancing, custom TLS configuration such as CA certs, client certificates, etc.).
@@ -99,7 +99,7 @@ No UI actors. No end-user-facing surface. This is a library consumed programmati
 | FR-2.4 `ExpandPermissionTree` | ✅ Yes | ✅ Yes (in response) | Read path |
 | FR-2.5 `ReadRelationships` | ✅ Yes | ✅ Yes (per item) | Streaming read |
 | FR-2.6 `WriteRelationships` | ❌ No | ✅ Yes | Mutating — always writes at latest |
-| FR-2.7 `DeleteRelationships` | ✅ Yes (for filter eval) | ✅ Yes | Mutating, but filter is evaluated at the specified consistency snapshot; deletion occurs at latest. See FR-2.7 note. |
+| FR-2.7 `DeleteRelationships` | ❌ No | ✅ Yes | Mutating — the SpiceDB proto does not accept a consistency parameter for deletes. |
 | FR-3.1 `ReadSchema` | ❌ No | ✅ Yes | Schema reads don't accept consistency |
 | FR-3.2 `WriteSchema` | ❌ No | ✅ Yes | Mutating |
 | FR-4.1 `Watch` | N/A (uses `after_token`) | ✅ Yes (checkpoint per event) | Watch resumes from a token, not a consistency mode |
@@ -196,7 +196,7 @@ No UI actors. No end-user-facing surface. This is a library consumed programmati
 
 | ID | Category | Requirement |
 |---|---|---|
-| **NFR-1** | **Idiomacy** | Public API follows Rust API guidelines (C-COMMON-TRAITS, C-BUILDER, etc. per [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/)). |
+| **NFR-1** | **Idiomaticity** | Public API follows Rust API guidelines (C-COMMON-TRAITS, C-BUILDER, etc. per [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/)). |
 | **NFR-2** | **Async** | All network-calling methods are `async`. No blocking calls on async threads. |
 | **NFR-3** | **Runtime** | Requires `tokio` runtime. No runtime-agnostic abstraction layer (see Non-Goals). |
 | **NFR-4** | **Compilation** | Compiles on latest stable Rust. No nightly-only features. |
@@ -459,10 +459,8 @@ The library exposes a single primary entry point: the `Client` struct. The `Clie
 // Minimal — http:// = plaintext (localhost only without .insecure(true))
 let client = Client::new("http://localhost:50051", "my-token").await?;
 
-// With options
+// With options (TLS inferred from https:// scheme)
 let client = Client::builder("https://spicedb.prod.internal:50051", "my-token")
-    .tls(true)                             // default: inferred from scheme
-    .insecure(false)                       // default: false; must be true for http:// to non-loopback
     .connect_timeout(Duration::from_secs(5))
     .default_timeout(Duration::from_secs(10))  // applies to all RPCs unless overridden
     .build()
@@ -767,7 +765,7 @@ The following are explicitly **out of scope** for v1:
 | D-11 | **Feature-gate ExperimentalService behind `#[cfg(feature = "experimental")]`** | Resolved from OQ-5. These APIs may change without notice in SpiceDB. Feature-gating clearly signals instability and prevents accidental reliance. |
 | D-12 | **Caveats are IN SCOPE for v1 (read/check path + write path)** | Resolved from OQ-6. Caveated relationships are a core SpiceDB feature. Omitting caveat support would make the client unable to correctly interpret `CONDITIONAL` permission results — a security hazard. The `PermissionResult` enum faithfully represents all three states. |
 | D-13 | **`CheckPermission` returns `PermissionResult` enum, not `bool`** | SpiceDB's 3-state Permissionship (HAS_PERMISSION / NO_PERMISSION / CONDITIONAL) cannot be faithfully represented as a boolean. Returning `bool` is lossy and a security hazard. A convenience `.is_allowed()` method is provided but returns `Result` to force handling of the CONDITIONAL case. |
-| D-14 | **TLS determined by URI scheme with explicit override** | `https://` = TLS, `http://` = plaintext. Builder `.tls(bool)` overrides. Non-loopback `http://` requires `.insecure(true)`. Follows principle of secure-by-default with explicit opt-out. |
+| D-14 | **TLS determined by URI scheme** | `https://` = TLS, `http://` = plaintext. Non-loopback `http://` requires `.insecure(true)`. For advanced TLS (custom CAs, mTLS), use `Client::from_channel()`. Follows principle of secure-by-default with explicit opt-out. |
 | D-15 | **No auto-reconnect for streaming** | Consistent with NG-6 (no built-in retry). Callers manage reconnection using checkpoint ZedTokens. This keeps the library thin and avoids opinionated retry policies. |
 
 ---
