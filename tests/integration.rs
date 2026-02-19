@@ -86,7 +86,13 @@ async fn spicedb() -> Arc<SharedSpiceDb> {
                 for _ in 0..30 {
                     match Client::new(&endpoint, SPICEDB_TOKEN).await {
                         Ok(c) => match c.read_schema().await {
+                            // Schema read succeeded — SpiceDB is ready
                             Ok(_) => {
+                                result = Some(c);
+                                break;
+                            }
+                            // NotFound means SpiceDB is serving but has no schema yet — that's ready
+                            Err(ref e) if e.code() == Some(tonic::Code::NotFound) => {
                                 result = Some(c);
                                 break;
                             }
