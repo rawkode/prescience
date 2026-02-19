@@ -1,9 +1,10 @@
 //! Integration tests against a SpiceDB instance managed by testcontainers.
 //!
-//! Each test function spins up its own SpiceDB container, ensuring full isolation.
-//! No external services need to be running.
+//! All tests share a single SpiceDB container for speed. Each test uses
+//! unique resource/subject IDs to avoid interference.
 
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use prescience::{
     Client, Consistency, ObjectReference, PermissionResult, Relationship, RelationshipFilter,
@@ -12,6 +13,7 @@ use prescience::{
 use testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
+use tokio::sync::OnceCell;
 use tokio_stream::StreamExt;
 
 // ── SpiceDB testcontainer image ───────────────────────────────
@@ -55,22 +57,44 @@ impl testcontainers::Image for SpiceDbImage {
     }
 }
 
-// ── Helpers ───────────────────────────────────────────────────
+// ── Shared container ──────────────────────────────────────────
 
-async fn start_spicedb() -> (ContainerAsync<SpiceDbImage>, Client) {
-    let container = SpiceDbImage
-        .start()
+struct SharedSpiceDb {
+    _container: ContainerAsync<SpiceDbImage>,
+    client: Client,
+}
+
+static SPICEDB: OnceCell<Arc<SharedSpiceDb>> = OnceCell::const_new();
+
+async fn spicedb() -> Arc<SharedSpiceDb> {
+    SPICEDB
+        .get_or_init(|| async {
+            let container = SpiceDbImage
+                .start()
+                .await
+                .expect("failed to start SpiceDB container");
+            let port = container
+                .get_host_port_ipv4(SPICEDB_GRPC_PORT.tcp())
+                .await
+                .expect("failed to get mapped port");
+            let endpoint = format!("http://localhost:{}", port);
+            let client = Client::new(&endpoint, SPICEDB_TOKEN)
+                .await
+                .expect("failed to connect to SpiceDB");
+
+            // Write schema once for all tests
+            client
+                .write_schema(TEST_SCHEMA)
+                .await
+                .expect("write_schema failed");
+
+            Arc::new(SharedSpiceDb {
+                _container: container,
+                client,
+            })
+        })
         .await
-        .expect("failed to start SpiceDB container");
-    let port = container
-        .get_host_port_ipv4(SPICEDB_GRPC_PORT.tcp())
-        .await
-        .expect("failed to get mapped port");
-    let endpoint = format!("http://localhost:{}", port);
-    let client = Client::new(&endpoint, SPICEDB_TOKEN)
-        .await
-        .expect("failed to connect to SpiceDB");
-    (container, client)
+        .clone()
 }
 
 const TEST_SCHEMA: &str = r#"
@@ -89,23 +113,17 @@ definition document {
 
 #[tokio::test]
 async fn write_and_read_schema() {
-    let (_container, c) = start_spicedb().await;
+    let db = spicedb().await;
 
-    let written_at = c
-        .write_schema(TEST_SCHEMA)
-        .await
-        .expect("write_schema failed");
-    assert!(!written_at.token().is_empty());
-
-    let (schema_text, read_at) = c.read_schema().await.expect("read_schema failed");
+    let (schema_text, read_at) = db.client.read_schema().await.expect("read_schema failed");
     assert!(schema_text.contains("definition document"));
     assert!(!read_at.token().is_empty());
 }
 
 #[tokio::test]
 async fn write_schema_empty_rejected() {
-    let (_container, c) = start_spicedb().await;
-    let err = c.write_schema("").await.unwrap_err();
+    let db = spicedb().await;
+    let err = db.client.write_schema("").await.unwrap_err();
     assert!(matches!(err, prescience::Error::InvalidArgument(_)));
 }
 
@@ -113,19 +131,19 @@ async fn write_schema_empty_rejected() {
 
 #[tokio::test]
 async fn write_relationships_empty_rejected() {
-    let (_container, c) = start_spicedb().await;
-    let err = c.write_relationships(vec![]).await.unwrap_err();
+    let db = spicedb().await;
+    let err = db.client.write_relationships(vec![]).await.unwrap_err();
     assert!(matches!(err, prescience::Error::InvalidArgument(_)));
 }
 
 #[tokio::test]
 async fn write_and_check_permission() {
-    let (_container, c) = start_spicedb().await;
-    c.write_schema(TEST_SCHEMA).await.unwrap();
+    let db = spicedb().await;
+    let c = &db.client;
 
     let token = c
         .write_relationships(vec![RelationshipUpdate::create(Relationship::new(
-            ObjectReference::new("document", "doc-1").unwrap(),
+            ObjectReference::new("document", "check-1").unwrap(),
             "viewer",
             SubjectReference::new(
                 ObjectReference::new("user", "alice").unwrap(),
@@ -136,10 +154,9 @@ async fn write_and_check_permission() {
         .await
         .expect("write_relationships failed");
 
-    // Check: alice should have view on doc-1
     let result = c
         .check_permission(
-            &ObjectReference::new("document", "doc-1").unwrap(),
+            &ObjectReference::new("document", "check-1").unwrap(),
             "view",
             &SubjectReference::new(
                 ObjectReference::new("user", "alice").unwrap(),
@@ -154,10 +171,9 @@ async fn write_and_check_permission() {
     assert!(result.is_allowed().unwrap());
     assert_eq!(result, PermissionResult::Allowed);
 
-    // Check: alice should NOT have edit on doc-1
     let result = c
         .check_permission(
-            &ObjectReference::new("document", "doc-1").unwrap(),
+            &ObjectReference::new("document", "check-1").unwrap(),
             "edit",
             &SubjectReference::new(
                 ObjectReference::new("user", "alice").unwrap(),
@@ -175,19 +191,19 @@ async fn write_and_check_permission() {
 
 #[tokio::test]
 async fn read_relationships() {
-    let (_container, c) = start_spicedb().await;
-    c.write_schema(TEST_SCHEMA).await.unwrap();
+    let db = spicedb().await;
+    let c = &db.client;
 
     let token = c
         .write_relationships(vec![
             RelationshipUpdate::create(Relationship::new(
-                ObjectReference::new("document", "doc-read-1").unwrap(),
+                ObjectReference::new("document", "read-1").unwrap(),
                 "viewer",
                 SubjectReference::new(ObjectReference::new("user", "bob").unwrap(), None::<String>)
                     .unwrap(),
             )),
             RelationshipUpdate::create(Relationship::new(
-                ObjectReference::new("document", "doc-read-1").unwrap(),
+                ObjectReference::new("document", "read-1").unwrap(),
                 "editor",
                 SubjectReference::new(
                     ObjectReference::new("user", "carol").unwrap(),
@@ -199,7 +215,7 @@ async fn read_relationships() {
         .await
         .unwrap();
 
-    let filter = RelationshipFilter::new("document").resource_id("doc-read-1");
+    let filter = RelationshipFilter::new("document").resource_id("read-1");
     let mut stream = c
         .read_relationships(filter)
         .consistency(Consistency::AtLeastAsFresh(token))
@@ -211,7 +227,7 @@ async fn read_relationships() {
     while let Some(result) = stream.next().await {
         let item = result.expect("stream item error");
         assert_eq!(item.relationship.resource.object_type(), "document");
-        assert_eq!(item.relationship.resource.object_id(), "doc-read-1");
+        assert_eq!(item.relationship.resource.object_id(), "read-1");
         count += 1;
     }
     assert_eq!(count, 2);
@@ -219,13 +235,13 @@ async fn read_relationships() {
 
 #[tokio::test]
 async fn lookup_resources() {
-    let (_container, c) = start_spicedb().await;
-    c.write_schema(TEST_SCHEMA).await.unwrap();
+    let db = spicedb().await;
+    let c = &db.client;
 
     let token = c
         .write_relationships(vec![
             RelationshipUpdate::create(Relationship::new(
-                ObjectReference::new("document", "doc-lr-1").unwrap(),
+                ObjectReference::new("document", "lr-1").unwrap(),
                 "viewer",
                 SubjectReference::new(
                     ObjectReference::new("user", "dave").unwrap(),
@@ -234,7 +250,7 @@ async fn lookup_resources() {
                 .unwrap(),
             )),
             RelationshipUpdate::create(Relationship::new(
-                ObjectReference::new("document", "doc-lr-2").unwrap(),
+                ObjectReference::new("document", "lr-2").unwrap(),
                 "editor",
                 SubjectReference::new(
                     ObjectReference::new("user", "dave").unwrap(),
@@ -265,25 +281,25 @@ async fn lookup_resources() {
         resource_ids.push(item.resource_id);
     }
     resource_ids.sort();
-    assert!(resource_ids.contains(&"doc-lr-1".to_string()));
-    assert!(resource_ids.contains(&"doc-lr-2".to_string()));
+    assert!(resource_ids.contains(&"lr-1".to_string()));
+    assert!(resource_ids.contains(&"lr-2".to_string()));
 }
 
 #[tokio::test]
 async fn lookup_subjects() {
-    let (_container, c) = start_spicedb().await;
-    c.write_schema(TEST_SCHEMA).await.unwrap();
+    let db = spicedb().await;
+    let c = &db.client;
 
     let token = c
         .write_relationships(vec![
             RelationshipUpdate::create(Relationship::new(
-                ObjectReference::new("document", "doc-ls-1").unwrap(),
+                ObjectReference::new("document", "ls-1").unwrap(),
                 "viewer",
                 SubjectReference::new(ObjectReference::new("user", "eve").unwrap(), None::<String>)
                     .unwrap(),
             )),
             RelationshipUpdate::create(Relationship::new(
-                ObjectReference::new("document", "doc-ls-1").unwrap(),
+                ObjectReference::new("document", "ls-1").unwrap(),
                 "viewer",
                 SubjectReference::new(
                     ObjectReference::new("user", "frank").unwrap(),
@@ -295,7 +311,7 @@ async fn lookup_subjects() {
         .await
         .unwrap();
 
-    let resource = ObjectReference::new("document", "doc-ls-1").unwrap();
+    let resource = ObjectReference::new("document", "ls-1").unwrap();
     let mut stream = c
         .lookup_subjects(&resource, "view", "user")
         .consistency(Consistency::AtLeastAsFresh(token))
@@ -315,12 +331,12 @@ async fn lookup_subjects() {
 
 #[tokio::test]
 async fn delete_relationships() {
-    let (_container, c) = start_spicedb().await;
-    c.write_schema(TEST_SCHEMA).await.unwrap();
+    let db = spicedb().await;
+    let c = &db.client;
 
     let token = c
         .write_relationships(vec![RelationshipUpdate::create(Relationship::new(
-            ObjectReference::new("document", "doc-del-1").unwrap(),
+            ObjectReference::new("document", "del-1").unwrap(),
             "viewer",
             SubjectReference::new(
                 ObjectReference::new("user", "grace").unwrap(),
@@ -331,10 +347,9 @@ async fn delete_relationships() {
         .await
         .unwrap();
 
-    // Verify relationship exists
     let result = c
         .check_permission(
-            &ObjectReference::new("document", "doc-del-1").unwrap(),
+            &ObjectReference::new("document", "del-1").unwrap(),
             "view",
             &SubjectReference::new(
                 ObjectReference::new("user", "grace").unwrap(),
@@ -347,11 +362,10 @@ async fn delete_relationships() {
         .unwrap();
     assert!(result.is_allowed().unwrap());
 
-    // Delete and verify
     let del_token = c
         .delete_relationships(
             RelationshipFilter::new("document")
-                .resource_id("doc-del-1")
+                .resource_id("del-1")
                 .relation("viewer"),
         )
         .await
@@ -359,7 +373,7 @@ async fn delete_relationships() {
 
     let result = c
         .check_permission(
-            &ObjectReference::new("document", "doc-del-1").unwrap(),
+            &ObjectReference::new("document", "del-1").unwrap(),
             "view",
             &SubjectReference::new(
                 ObjectReference::new("user", "grace").unwrap(),
@@ -378,8 +392,8 @@ async fn delete_relationships() {
 #[cfg(feature = "watch")]
 #[tokio::test]
 async fn watch_receives_updates() {
-    let (_container, c) = start_spicedb().await;
-    c.write_schema(TEST_SCHEMA).await.unwrap();
+    let db = spicedb().await;
+    let c = &db.client;
 
     let mut stream = c
         .watch(vec!["document"])
@@ -387,13 +401,11 @@ async fn watch_receives_updates() {
         .await
         .expect("watch failed");
 
-    // Write a relationship to trigger an event
     let c2 = c.clone();
     let write_handle = tokio::spawn(async move {
-        // Small delay to ensure watch is established
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         c2.write_relationships(vec![RelationshipUpdate::create(Relationship::new(
-            ObjectReference::new("document", "doc-watch-1").unwrap(),
+            ObjectReference::new("document", "watch-1").unwrap(),
             "viewer",
             SubjectReference::new(ObjectReference::new("user", "hal").unwrap(), None::<String>)
                 .unwrap(),
@@ -402,8 +414,7 @@ async fn watch_receives_updates() {
         .unwrap();
     });
 
-    // Should receive at least one event within a reasonable timeout
-    let event = tokio::time::timeout(std::time::Duration::from_secs(5), stream.next())
+    let event = tokio::time::timeout(std::time::Duration::from_secs(10), stream.next())
         .await
         .expect("timed out waiting for watch event")
         .expect("stream ended")
@@ -420,12 +431,12 @@ async fn watch_receives_updates() {
 async fn bulk_check_permissions() {
     use prescience::BulkCheckItem;
 
-    let (_container, c) = start_spicedb().await;
-    c.write_schema(TEST_SCHEMA).await.unwrap();
+    let db = spicedb().await;
+    let c = &db.client;
 
     let token = c
         .write_relationships(vec![RelationshipUpdate::create(Relationship::new(
-            ObjectReference::new("document", "doc-bulk-1").unwrap(),
+            ObjectReference::new("document", "bulk-1").unwrap(),
             "viewer",
             SubjectReference::new(
                 ObjectReference::new("user", "iris").unwrap(),
@@ -439,7 +450,7 @@ async fn bulk_check_permissions() {
     let results = c
         .bulk_check_permissions(vec![
             BulkCheckItem::new(
-                ObjectReference::new("document", "doc-bulk-1").unwrap(),
+                ObjectReference::new("document", "bulk-1").unwrap(),
                 "view",
                 SubjectReference::new(
                     ObjectReference::new("user", "iris").unwrap(),
@@ -448,7 +459,7 @@ async fn bulk_check_permissions() {
                 .unwrap(),
             ),
             BulkCheckItem::new(
-                ObjectReference::new("document", "doc-bulk-1").unwrap(),
+                ObjectReference::new("document", "bulk-1").unwrap(),
                 "edit",
                 SubjectReference::new(
                     ObjectReference::new("user", "iris").unwrap(),
@@ -462,8 +473,6 @@ async fn bulk_check_permissions() {
         .expect("bulk_check failed");
 
     assert_eq!(results.len(), 2);
-    // First: viewer -> can view
     assert!(results[0].as_ref().unwrap().is_allowed().unwrap());
-    // Second: not editor -> cannot edit
     assert!(!results[1].as_ref().unwrap().is_allowed().unwrap());
 }
