@@ -92,52 +92,17 @@ jobs:
           version: "27.x"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Start SpiceDB
-        run: |
-          docker run -d \
-            --name spicedb \
-            -p 50051:50051 \
-            authzed/spicedb:latest \
-            serve \
-            --grpc-preshared-key "test-key" \
-            --datastore-engine memory \
-            --grpc-no-tls
-          for i in $(seq 1 30); do
-            if docker logs spicedb 2>&1 | grep -q "grpc server started serving"; then
-              echo "SpiceDB is ready"
-              break
-            fi
-            echo "Waiting for SpiceDB... ($i/30)"
-            sleep 1
-          done
-
       - name: Unit tests (default features)
         run: cargo test --lib
-        env:
-          SPICEDB_ENDPOINT: http://localhost:50051
-          SPICEDB_TOKEN: test-key
 
       - name: Unit tests (all features)
         run: cargo test --all-features --lib
-        env:
-          SPICEDB_ENDPOINT: http://localhost:50051
-          SPICEDB_TOKEN: test-key
 
       - name: Doc tests
         run: cargo test --all-features --doc
-        env:
-          SPICEDB_ENDPOINT: http://localhost:50051
-          SPICEDB_TOKEN: test-key
 
       - name: Integration tests
         run: cargo test --all-features --test integration
-        env:
-          SPICEDB_ENDPOINT: http://localhost:50051
-          SPICEDB_TOKEN: test-key
-
-      - name: SpiceDB logs
-        if: failure()
-        run: docker logs spicedb
 
   doc:
     name: Documentation
