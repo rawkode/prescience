@@ -1,33 +1,77 @@
-//! Integration tests against a live SpiceDB instance.
+//! Integration tests against a SpiceDB instance managed by testcontainers.
 //!
-//! Requires SpiceDB running locally. To start one:
-//!   spicedb serve --grpc-preshared-key test-key --datastore-engine memory --grpc-no-tls &
-//!
-//! Configure via environment variables (defaults shown):
-//!   SPICEDB_ENDPOINT=http://localhost:50051
-//!   SPICEDB_TOKEN=test-key
+//! Each test function spins up its own SpiceDB container, ensuring full isolation.
+//! No external services need to be running.
+
+use std::borrow::Cow;
 
 use prescience::{
     Client, Consistency, ObjectReference, PermissionResult, Relationship, RelationshipFilter,
     RelationshipUpdate, SubjectReference,
 };
+use testcontainers::core::{IntoContainerPort, WaitFor};
+use testcontainers::runners::AsyncRunner;
+use testcontainers::ContainerAsync;
 use tokio_stream::StreamExt;
 
-fn endpoint() -> String {
-    std::env::var("SPICEDB_ENDPOINT").unwrap_or_else(|_| "http://localhost:50051".into())
+// ── SpiceDB testcontainer image ───────────────────────────────
+
+const SPICEDB_IMAGE: &str = "authzed/spicedb";
+const SPICEDB_TAG: &str = "v1.45.4";
+const SPICEDB_GRPC_PORT: u16 = 50051;
+const SPICEDB_TOKEN: &str = "test-key";
+
+#[derive(Debug)]
+struct SpiceDbImage;
+
+impl testcontainers::Image for SpiceDbImage {
+    fn name(&self) -> &str {
+        SPICEDB_IMAGE
+    }
+
+    fn tag(&self) -> &str {
+        SPICEDB_TAG
+    }
+
+    fn ready_conditions(&self) -> Vec<WaitFor> {
+        vec![WaitFor::message_on_stderr("grpc server started serving")]
+    }
+
+    fn env_vars(
+        &self,
+    ) -> impl IntoIterator<Item = (impl Into<Cow<'_, str>>, impl Into<Cow<'_, str>>)> {
+        vec![
+            ("SPICEDB_GRPC_PRESHARED_KEY", SPICEDB_TOKEN),
+            ("SPICEDB_DATASTORE_ENGINE", "memory"),
+        ]
+    }
+
+    fn cmd(&self) -> impl IntoIterator<Item = impl Into<Cow<'_, str>>> {
+        vec!["serve", "--grpc-no-tls"]
+    }
+
+    fn expose_ports(&self) -> &[testcontainers::core::ContainerPort] {
+        &[testcontainers::core::ContainerPort::Tcp(SPICEDB_GRPC_PORT)]
+    }
 }
 
-fn token() -> String {
-    std::env::var("SPICEDB_TOKEN").unwrap_or_else(|_| "test-key".into())
-}
+// ── Helpers ───────────────────────────────────────────────────
 
-async fn client() -> Client {
-    Client::new(&endpoint(), &token())
+async fn start_spicedb() -> (ContainerAsync<SpiceDbImage>, Client) {
+    let container = SpiceDbImage
+        .start()
         .await
-        .expect("failed to connect to SpiceDB")
+        .expect("failed to start SpiceDB container");
+    let port = container
+        .get_host_port_ipv4(SPICEDB_GRPC_PORT.tcp())
+        .await
+        .expect("failed to get mapped port");
+    let endpoint = format!("http://localhost:{}", port);
+    let client = Client::new(&endpoint, SPICEDB_TOKEN)
+        .await
+        .expect("failed to connect to SpiceDB");
+    (container, client)
 }
-
-// ── Schema ────────────────────────────────────────────────────
 
 const TEST_SCHEMA: &str = r#"
 definition user {}
@@ -41,9 +85,11 @@ definition document {
 }
 "#;
 
+// ── Schema ────────────────────────────────────────────────────
+
 #[tokio::test]
 async fn write_and_read_schema() {
-    let c = client().await;
+    let (_container, c) = start_spicedb().await;
 
     let written_at = c
         .write_schema(TEST_SCHEMA)
@@ -58,7 +104,7 @@ async fn write_and_read_schema() {
 
 #[tokio::test]
 async fn write_schema_empty_rejected() {
-    let c = client().await;
+    let (_container, c) = start_spicedb().await;
     let err = c.write_schema("").await.unwrap_err();
     assert!(matches!(err, prescience::Error::InvalidArgument(_)));
 }
@@ -67,14 +113,14 @@ async fn write_schema_empty_rejected() {
 
 #[tokio::test]
 async fn write_relationships_empty_rejected() {
-    let c = client().await;
+    let (_container, c) = start_spicedb().await;
     let err = c.write_relationships(vec![]).await.unwrap_err();
     assert!(matches!(err, prescience::Error::InvalidArgument(_)));
 }
 
 #[tokio::test]
 async fn write_and_check_permission() {
-    let c = client().await;
+    let (_container, c) = start_spicedb().await;
     c.write_schema(TEST_SCHEMA).await.unwrap();
 
     let token = c
@@ -129,7 +175,7 @@ async fn write_and_check_permission() {
 
 #[tokio::test]
 async fn read_relationships() {
-    let c = client().await;
+    let (_container, c) = start_spicedb().await;
     c.write_schema(TEST_SCHEMA).await.unwrap();
 
     let token = c
@@ -173,7 +219,7 @@ async fn read_relationships() {
 
 #[tokio::test]
 async fn lookup_resources() {
-    let c = client().await;
+    let (_container, c) = start_spicedb().await;
     c.write_schema(TEST_SCHEMA).await.unwrap();
 
     let token = c
@@ -225,7 +271,7 @@ async fn lookup_resources() {
 
 #[tokio::test]
 async fn lookup_subjects() {
-    let c = client().await;
+    let (_container, c) = start_spicedb().await;
     c.write_schema(TEST_SCHEMA).await.unwrap();
 
     let token = c
@@ -269,7 +315,7 @@ async fn lookup_subjects() {
 
 #[tokio::test]
 async fn delete_relationships() {
-    let c = client().await;
+    let (_container, c) = start_spicedb().await;
     c.write_schema(TEST_SCHEMA).await.unwrap();
 
     let token = c
@@ -332,7 +378,7 @@ async fn delete_relationships() {
 #[cfg(feature = "watch")]
 #[tokio::test]
 async fn watch_receives_updates() {
-    let c = client().await;
+    let (_container, c) = start_spicedb().await;
     c.write_schema(TEST_SCHEMA).await.unwrap();
 
     let mut stream = c
@@ -374,7 +420,7 @@ async fn watch_receives_updates() {
 async fn bulk_check_permissions() {
     use prescience::BulkCheckItem;
 
-    let c = client().await;
+    let (_container, c) = start_spicedb().await;
     c.write_schema(TEST_SCHEMA).await.unwrap();
 
     let token = c
