@@ -22,7 +22,9 @@ fn token() -> String {
 }
 
 async fn client() -> Client {
-    Client::new(&endpoint(), &token()).await.expect("failed to connect to SpiceDB")
+    Client::new(&endpoint(), &token())
+        .await
+        .expect("failed to connect to SpiceDB")
 }
 
 // ── Schema ────────────────────────────────────────────────────
@@ -43,7 +45,10 @@ definition document {
 async fn write_and_read_schema() {
     let c = client().await;
 
-    let written_at = c.write_schema(TEST_SCHEMA).await.expect("write_schema failed");
+    let written_at = c
+        .write_schema(TEST_SCHEMA)
+        .await
+        .expect("write_schema failed");
     assert!(!written_at.token().is_empty());
 
     let (schema_text, read_at) = c.read_schema().await.expect("read_schema failed");
@@ -76,8 +81,11 @@ async fn write_and_check_permission() {
         .write_relationships(vec![RelationshipUpdate::create(Relationship::new(
             ObjectReference::new("document", "doc-1").unwrap(),
             "viewer",
-            SubjectReference::new(ObjectReference::new("user", "alice").unwrap(), None::<String>)
-                .unwrap(),
+            SubjectReference::new(
+                ObjectReference::new("user", "alice").unwrap(),
+                None::<String>,
+            )
+            .unwrap(),
         ))])
         .await
         .expect("write_relationships failed");
@@ -129,11 +137,8 @@ async fn read_relationships() {
             RelationshipUpdate::create(Relationship::new(
                 ObjectReference::new("document", "doc-read-1").unwrap(),
                 "viewer",
-                SubjectReference::new(
-                    ObjectReference::new("user", "bob").unwrap(),
-                    None::<String>,
-                )
-                .unwrap(),
+                SubjectReference::new(ObjectReference::new("user", "bob").unwrap(), None::<String>)
+                    .unwrap(),
             )),
             RelationshipUpdate::create(Relationship::new(
                 ObjectReference::new("document", "doc-read-1").unwrap(),
@@ -228,11 +233,8 @@ async fn lookup_subjects() {
             RelationshipUpdate::create(Relationship::new(
                 ObjectReference::new("document", "doc-ls-1").unwrap(),
                 "viewer",
-                SubjectReference::new(
-                    ObjectReference::new("user", "eve").unwrap(),
-                    None::<String>,
-                )
-                .unwrap(),
+                SubjectReference::new(ObjectReference::new("user", "eve").unwrap(), None::<String>)
+                    .unwrap(),
             )),
             RelationshipUpdate::create(Relationship::new(
                 ObjectReference::new("document", "doc-ls-1").unwrap(),
@@ -333,7 +335,11 @@ async fn watch_receives_updates() {
     let c = client().await;
     c.write_schema(TEST_SCHEMA).await.unwrap();
 
-    let mut stream = c.watch(vec!["document"]).send().await.expect("watch failed");
+    let mut stream = c
+        .watch(vec!["document"])
+        .send()
+        .await
+        .expect("watch failed");
 
     // Write a relationship to trigger an event
     let c2 = c.clone();
@@ -343,11 +349,8 @@ async fn watch_receives_updates() {
         c2.write_relationships(vec![RelationshipUpdate::create(Relationship::new(
             ObjectReference::new("document", "doc-watch-1").unwrap(),
             "viewer",
-            SubjectReference::new(
-                ObjectReference::new("user", "hal").unwrap(),
-                None::<String>,
-            )
-            .unwrap(),
+            SubjectReference::new(ObjectReference::new("user", "hal").unwrap(), None::<String>)
+                .unwrap(),
         ))])
         .await
         .unwrap();

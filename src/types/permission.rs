@@ -33,11 +33,9 @@ impl PermissionResult {
         match self {
             PermissionResult::Allowed => Ok(true),
             PermissionResult::Denied => Ok(false),
-            PermissionResult::Conditional { missing_fields } => {
-                Err(Error::ConditionalPermission {
-                    missing_fields: missing_fields.clone(),
-                })
-            }
+            PermissionResult::Conditional { missing_fields } => Err(Error::ConditionalPermission {
+                missing_fields: missing_fields.clone(),
+            }),
         }
     }
 
@@ -101,9 +99,7 @@ pub struct LookupResourceResult {
 }
 
 impl LookupResourceResult {
-    pub(crate) fn from_proto(
-        proto: crate::proto::LookupResourcesResponse,
-    ) -> Result<Self, Error> {
+    pub(crate) fn from_proto(proto: crate::proto::LookupResourcesResponse) -> Result<Self, Error> {
         let permission = PermissionResult::from_lookup_permissionship(
             proto.permissionship,
             proto.partial_caveat_info,
@@ -134,9 +130,7 @@ pub struct LookupSubjectResult {
 }
 
 impl LookupSubjectResult {
-    pub(crate) fn from_proto(
-        proto: crate::proto::LookupSubjectsResponse,
-    ) -> Result<Self, Error> {
+    pub(crate) fn from_proto(proto: crate::proto::LookupSubjectsResponse) -> Result<Self, Error> {
         let looked_up_at = proto
             .looked_up_at
             .ok_or_else(|| Error::Serialization("missing looked_up_at".into()))?
@@ -241,11 +235,8 @@ impl PermissionTreeNode {
     ) -> Result<Self, Error> {
         match tree_type {
             Some(crate::proto::permission_relationship_tree::TreeType::Leaf(leaf)) => {
-                let subjects: Result<Vec<SubjectReference>, Error> = leaf
-                    .subjects
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect();
+                let subjects: Result<Vec<SubjectReference>, Error> =
+                    leaf.subjects.into_iter().map(TryInto::try_into).collect();
                 Ok(PermissionTreeNode::Leaf {
                     subjects: subjects?,
                 })

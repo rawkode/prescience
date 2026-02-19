@@ -40,7 +40,8 @@ impl<'a> CheckPermissionRequest<'a> {
 
 impl<'a> std::future::IntoFuture for CheckPermissionRequest<'a> {
     type Output = Result<PermissionResult, Error>;
-    type IntoFuture = std::pin::Pin<Box<dyn std::future::Future<Output = Self::Output> + Send + 'a>>;
+    type IntoFuture =
+        std::pin::Pin<Box<dyn std::future::Future<Output = Self::Output> + Send + 'a>>;
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
@@ -62,10 +63,7 @@ impl<'a> std::future::IntoFuture for CheckPermissionRequest<'a> {
                 .map_err(Error::from_status)?;
 
             let inner = response.into_inner();
-            PermissionResult::from_check_response(
-                inner.permissionship,
-                inner.partial_caveat_info,
-            )
+            PermissionResult::from_check_response(inner.permissionship, inner.partial_caveat_info)
         })
     }
 }
@@ -89,14 +87,13 @@ impl<'a> WriteRelationshipsRequest<'a> {
 
 impl<'a> std::future::IntoFuture for WriteRelationshipsRequest<'a> {
     type Output = Result<ZedToken, Error>;
-    type IntoFuture = std::pin::Pin<Box<dyn std::future::Future<Output = Self::Output> + Send + 'a>>;
+    type IntoFuture =
+        std::pin::Pin<Box<dyn std::future::Future<Output = Self::Output> + Send + 'a>>;
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
             if self.updates.is_empty() {
-                return Err(Error::InvalidArgument(
-                    "updates must not be empty".into(),
-                ));
+                return Err(Error::InvalidArgument("updates must not be empty".into()));
             }
 
             let req = proto::WriteRelationshipsRequest {
@@ -141,7 +138,8 @@ impl<'a> DeleteRelationshipsRequest<'a> {
 
 impl<'a> std::future::IntoFuture for DeleteRelationshipsRequest<'a> {
     type Output = Result<ZedToken, Error>;
-    type IntoFuture = std::pin::Pin<Box<dyn std::future::Future<Output = Self::Output> + Send + 'a>>;
+    type IntoFuture =
+        std::pin::Pin<Box<dyn std::future::Future<Output = Self::Output> + Send + 'a>>;
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
@@ -343,7 +341,8 @@ impl<'a> ExpandPermissionTreeRequest<'a> {
 
 impl<'a> std::future::IntoFuture for ExpandPermissionTreeRequest<'a> {
     type Output = Result<PermissionTree, Error>;
-    type IntoFuture = std::pin::Pin<Box<dyn std::future::Future<Output = Self::Output> + Send + 'a>>;
+    type IntoFuture =
+        std::pin::Pin<Box<dyn std::future::Future<Output = Self::Output> + Send + 'a>>;
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
@@ -462,10 +461,7 @@ impl Client {
     /// Reads relationships matching the given filter.
     ///
     /// Returns a streaming builder. Call `.send().await?` to get the stream.
-    pub fn read_relationships(
-        &self,
-        filter: RelationshipFilter,
-    ) -> ReadRelationshipsRequest<'_> {
+    pub fn read_relationships(&self, filter: RelationshipFilter) -> ReadRelationshipsRequest<'_> {
         ReadRelationshipsRequest {
             client: self,
             filter: (&filter).into(),

@@ -32,9 +32,7 @@ impl ZedToken {
     pub fn new(token: impl Into<String>) -> Result<Self, Error> {
         let token = token.into();
         if token.is_empty() {
-            return Err(Error::InvalidArgument(
-                "ZedToken must not be empty".into(),
-            ));
+            return Err(Error::InvalidArgument("ZedToken must not be empty".into()));
         }
         Ok(Self { token })
     }

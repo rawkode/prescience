@@ -184,12 +184,7 @@ impl<'a> BulkExportRelationshipsRequest<'a> {
     }
 
     /// Sends the request and returns a stream of relationships.
-    pub async fn send(
-        self,
-    ) -> Result<
-        impl Stream<Item = Result<Relationship, Error>>,
-        Error,
-    > {
+    pub async fn send(self) -> Result<impl Stream<Item = Result<Relationship, Error>>, Error> {
         let req = proto::ExportBulkRelationshipsRequest {
             consistency: self.consistency,
             optional_limit: 0,
@@ -259,10 +254,7 @@ impl Client {
     ///
     /// Accepts any `Stream<Item = Relationship>`. Returns the number of
     /// relationships loaded.
-    pub fn bulk_import_relationships<S>(
-        &self,
-        stream: S,
-    ) -> BulkImportRelationshipsRequest<'_, S>
+    pub fn bulk_import_relationships<S>(&self, stream: S) -> BulkImportRelationshipsRequest<'_, S>
     where
         S: Stream<Item = Relationship> + Send + 'static,
     {

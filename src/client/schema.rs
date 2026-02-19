@@ -32,9 +32,7 @@ impl Client {
     pub async fn write_schema(&self, schema: impl Into<String>) -> Result<ZedToken, Error> {
         let schema = schema.into();
         if schema.is_empty() {
-            return Err(Error::InvalidArgument(
-                "schema must not be empty".into(),
-            ));
+            return Err(Error::InvalidArgument("schema must not be empty".into()));
         }
 
         let response = self

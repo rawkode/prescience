@@ -16,11 +16,8 @@ pub struct WatchEvent {
 
 impl WatchEvent {
     pub(crate) fn from_proto(proto: crate::proto::WatchResponse) -> Result<Self, Error> {
-        let updates: Result<Vec<RelationshipUpdate>, Error> = proto
-            .updates
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect();
+        let updates: Result<Vec<RelationshipUpdate>, Error> =
+            proto.updates.into_iter().map(TryInto::try_into).collect();
         let checkpoint = proto
             .changes_through
             .ok_or_else(|| Error::Serialization("missing changes_through token".into()))?

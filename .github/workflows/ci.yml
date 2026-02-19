@@ -111,14 +111,26 @@ jobs:
             sleep 1
           done
 
-      - name: Tests (default features)
-        run: cargo test
+      - name: Unit tests (default features)
+        run: cargo test --lib
         env:
           SPICEDB_ENDPOINT: http://localhost:50051
           SPICEDB_TOKEN: test-key
 
-      - name: Tests (all features)
-        run: cargo test --all-features
+      - name: Unit tests (all features)
+        run: cargo test --all-features --lib
+        env:
+          SPICEDB_ENDPOINT: http://localhost:50051
+          SPICEDB_TOKEN: test-key
+
+      - name: Doc tests
+        run: cargo test --all-features --doc
+        env:
+          SPICEDB_ENDPOINT: http://localhost:50051
+          SPICEDB_TOKEN: test-key
+
+      - name: Integration tests
+        run: cargo test --all-features --test integration
         env:
           SPICEDB_ENDPOINT: http://localhost:50051
           SPICEDB_TOKEN: test-key
@@ -151,14 +163,14 @@ jobs:
         run: cargo doc --all-features --no-deps
 
   msrv:
-    name: MSRV (1.75)
+    name: MSRV (1.80)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: dtolnay/rust-toolchain@1.75
+      - uses: dtolnay/rust-toolchain@1.80
 
       - uses: Swatinem/rust-cache@v2
 
@@ -167,6 +179,9 @@ jobs:
         with:
           version: "27.x"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate compatible lockfile
+        run: cargo generate-lockfile
 
       - name: Check MSRV
         run: cargo check --all-features
