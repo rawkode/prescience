@@ -78,9 +78,36 @@ async fn spicedb() -> Arc<SharedSpiceDb> {
                 .await
                 .expect("failed to get mapped port");
             let endpoint = format!("http://localhost:{}", port);
-            let client = Client::new(&endpoint, SPICEDB_TOKEN)
-                .await
-                .expect("failed to connect to SpiceDB");
+
+            // Retry until gRPC is fully serving (log message can appear before ready)
+            let client = {
+                let mut last_err = None;
+                let mut result = None;
+                for _ in 0..30 {
+                    match Client::new(&endpoint, SPICEDB_TOKEN).await {
+                        Ok(c) => match c.read_schema().await {
+                            Ok(_) => {
+                                result = Some(c);
+                                break;
+                            }
+                            Err(e) => {
+                                last_err = Some(format!("{e}"));
+                                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                            }
+                        },
+                        Err(e) => {
+                            last_err = Some(format!("{e}"));
+                            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                        }
+                    }
+                }
+                result.unwrap_or_else(|| {
+                    panic!(
+                        "SpiceDB not ready after retries: {}",
+                        last_err.unwrap_or_default()
+                    )
+                })
+            };
 
             // Write schema once for all tests
             client
