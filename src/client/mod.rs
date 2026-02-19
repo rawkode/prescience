@@ -1,6 +1,8 @@
 //! SpiceDB client implementation.
 
 mod builder;
+#[cfg(feature = "experimental")]
+pub mod experimental;
 mod permissions;
 mod schema;
 #[cfg(feature = "watch")]
