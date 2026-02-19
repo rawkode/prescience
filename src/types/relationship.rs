@@ -75,12 +75,7 @@ impl TryFrom<crate::proto::Relationship> for Relationship {
             name: c.caveat_name,
             context: c
                 .context
-                .map(|s| {
-                    s.fields
-                        .into_iter()
-                        .map(|(k, v)| (k, v.into()))
-                        .collect()
-                })
+                .map(|s| s.fields.into_iter().map(|(k, v)| (k, v.into())).collect())
                 .unwrap_or_default(),
         });
         Ok(Relationship {
@@ -259,8 +254,11 @@ mod tests {
         let rel = Relationship::new(
             ObjectReference::new("doc", "1").unwrap(),
             "viewer",
-            SubjectReference::new(ObjectReference::new("user", "alice").unwrap(), None::<String>)
-                .unwrap(),
+            SubjectReference::new(
+                ObjectReference::new("user", "alice").unwrap(),
+                None::<String>,
+            )
+            .unwrap(),
         );
         let update = RelationshipUpdate::create(rel);
         assert_eq!(update.operation, Operation::Create);
@@ -271,8 +269,11 @@ mod tests {
         let rel = Relationship::new(
             ObjectReference::new("doc", "1").unwrap(),
             "viewer",
-            SubjectReference::new(ObjectReference::new("user", "alice").unwrap(), None::<String>)
-                .unwrap(),
+            SubjectReference::new(
+                ObjectReference::new("user", "alice").unwrap(),
+                None::<String>,
+            )
+            .unwrap(),
         )
         .with_caveat(Caveat::new("ip_check", HashMap::new()));
         assert!(rel.optional_caveat.is_some());

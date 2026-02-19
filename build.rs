@@ -13,16 +13,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "authzed/api/v1/experimental_service.proto",
     ];
 
-    let proto_paths: Vec<PathBuf> = proto_files
-        .iter()
-        .map(|f| proto_root.join(f))
-        .collect();
+    let proto_paths: Vec<PathBuf> = proto_files.iter().map(|f| proto_root.join(f)).collect();
 
     // Include paths for resolving imports
-    let includes = &[
-        proto_root.clone(),
-        stubs_root,
-    ];
+    let includes = &[proto_root.clone(), stubs_root];
 
     tonic_build::configure()
         .build_server(false)

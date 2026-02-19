@@ -77,26 +77,19 @@ impl ClientBuilder {
         // Substring matching (e.g. contains("localhost")) is unsafe because
         // it would allow hosts like "localhost.evil.com".
         if self.endpoint.starts_with("http://") && !self.insecure {
-            let uri: http::Uri = self
-                .endpoint
-                .parse()
-                .map_err(|e: http::uri::InvalidUri| {
-                    Error::InvalidArgument(format!("invalid endpoint URI: {}", e))
-                })?;
+            let uri: http::Uri = self.endpoint.parse().map_err(|e: http::uri::InvalidUri| {
+                Error::InvalidArgument(format!("invalid endpoint URI: {}", e))
+            })?;
             let host = uri.host().unwrap_or("");
-            let is_loopback = host == "localhost"
-                || host == "127.0.0.1"
-                || host == "::1"
-                || host == "[::1]";
+            let is_loopback =
+                host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]";
 
             if !is_loopback {
-                return Err(Error::InvalidArgument(
-                    format!(
-                        "insecure connection to non-loopback address '{}' requires \
+                return Err(Error::InvalidArgument(format!(
+                    "insecure connection to non-loopback address '{}' requires \
                          .insecure(true) on the builder. Use https:// for production.",
-                        self.endpoint
-                    ),
-                ));
+                    self.endpoint
+                )));
             }
         }
 

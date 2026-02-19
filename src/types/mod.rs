@@ -26,6 +26,6 @@ pub use token::ZedToken;
 pub use watch::WatchEvent;
 
 // Re-export streaming result types
-pub use permission::CheckResult;
 pub use filter::ReadRelationshipResult;
+pub use permission::CheckResult;
 pub use permission::{LookupResourceResult, LookupSubjectResult};

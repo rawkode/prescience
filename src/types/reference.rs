@@ -39,9 +39,7 @@ impl ObjectReference {
             ));
         }
         if object_id.is_empty() {
-            return Err(Error::InvalidArgument(
-                "object_id must not be empty".into(),
-            ));
+            return Err(Error::InvalidArgument("object_id must not be empty".into()));
         }
 
         Ok(Self {

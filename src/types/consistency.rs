@@ -37,12 +37,8 @@ impl From<&Consistency> for crate::proto::Consistency {
         crate::proto::Consistency {
             requirement: Some(match c {
                 Consistency::MinimizeLatency => Requirement::MinimizeLatency(true),
-                Consistency::AtLeastAsFresh(token) => {
-                    Requirement::AtLeastAsFresh(token.into())
-                }
-                Consistency::AtExactSnapshot(token) => {
-                    Requirement::AtExactSnapshot(token.into())
-                }
+                Consistency::AtLeastAsFresh(token) => Requirement::AtLeastAsFresh(token.into()),
+                Consistency::AtExactSnapshot(token) => Requirement::AtExactSnapshot(token.into()),
                 Consistency::FullyConsistent => Requirement::FullyConsistent(true),
             }),
         }

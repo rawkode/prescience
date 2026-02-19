@@ -48,10 +48,7 @@ impl From<&ContextValue> for prost_types::Value {
                     values: items.iter().map(Into::into).collect(),
                 }),
                 ContextValue::Struct(fields) => Kind::StructValue(prost_types::Struct {
-                    fields: fields
-                        .iter()
-                        .map(|(k, v)| (k.clone(), v.into()))
-                        .collect(),
+                    fields: fields.iter().map(|(k, v)| (k.clone(), v.into())).collect(),
                 }),
             }),
         }
@@ -68,26 +65,18 @@ impl From<prost_types::Value> for ContextValue {
             Some(prost_types::value::Kind::ListValue(list)) => {
                 ContextValue::List(list.values.into_iter().map(Into::into).collect())
             }
-            Some(prost_types::value::Kind::StructValue(s)) => ContextValue::Struct(
-                s.fields
-                    .into_iter()
-                    .map(|(k, v)| (k, v.into()))
-                    .collect(),
-            ),
+            Some(prost_types::value::Kind::StructValue(s)) => {
+                ContextValue::Struct(s.fields.into_iter().map(|(k, v)| (k, v.into())).collect())
+            }
             None => ContextValue::Null,
         }
     }
 }
 
 /// Convert a HashMap of ContextValues to a prost_types::Struct.
-pub(crate) fn context_to_struct(
-    context: &HashMap<String, ContextValue>,
-) -> prost_types::Struct {
+pub(crate) fn context_to_struct(context: &HashMap<String, ContextValue>) -> prost_types::Struct {
     prost_types::Struct {
-        fields: context
-            .iter()
-            .map(|(k, v)| (k.clone(), v.into()))
-            .collect(),
+        fields: context.iter().map(|(k, v)| (k.clone(), v.into())).collect(),
     }
 }
 

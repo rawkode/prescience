@@ -85,10 +85,7 @@ impl Client {
     }
 
     /// Creates a builder for configuring a client connection.
-    pub fn builder(
-        endpoint: impl Into<String>,
-        token: impl Into<String>,
-    ) -> ClientBuilder {
+    pub fn builder(endpoint: impl Into<String>, token: impl Into<String>) -> ClientBuilder {
         ClientBuilder::new(endpoint, token)
     }
 
