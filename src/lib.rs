@@ -73,3 +73,6 @@ mod proto {
 pub use client::Client;
 pub use error::Error;
 pub use types::*;
+
+#[cfg(feature = "experimental")]
+pub use client::experimental::BulkCheckItem;
