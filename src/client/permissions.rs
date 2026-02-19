@@ -93,6 +93,12 @@ impl<'a> std::future::IntoFuture for WriteRelationshipsRequest<'a> {
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
+            if self.updates.is_empty() {
+                return Err(Error::InvalidArgument(
+                    "updates must not be empty".into(),
+                ));
+            }
+
             let req = proto::WriteRelationshipsRequest {
                 updates: self.updates,
                 optional_preconditions: self.preconditions,

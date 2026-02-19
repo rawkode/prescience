@@ -262,17 +262,17 @@ impl PermissionTreeNode {
                     1 => Ok(PermissionTreeNode::Union { children }),
                     2 => Ok(PermissionTreeNode::Intersection { children }),
                     3 => {
-                        // Exclusion: first child is base, second is excluded
-                        if children.len() >= 2 {
-                            let mut iter = children.into_iter();
-                            let base = Box::new(iter.next().unwrap());
-                            let excluded = Box::new(iter.next().unwrap());
-                            Ok(PermissionTreeNode::Exclusion { base, excluded })
-                        } else {
-                            Err(Error::Serialization(
-                                "exclusion requires at least 2 children".into(),
-                            ))
+                        // Exclusion: exactly 2 children — base and excluded
+                        if children.len() != 2 {
+                            return Err(Error::Serialization(format!(
+                                "exclusion requires exactly 2 children, got {}",
+                                children.len()
+                            )));
                         }
+                        let mut iter = children.into_iter();
+                        let base = Box::new(iter.next().unwrap());
+                        let excluded = Box::new(iter.next().unwrap());
+                        Ok(PermissionTreeNode::Exclusion { base, excluded })
                     }
                     other => Err(Error::Serialization(format!(
                         "unknown algebraic operation: {}",

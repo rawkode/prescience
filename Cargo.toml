@@ -19,6 +19,7 @@ tls-native = ["tonic/tls"]
 [dependencies]
 async-stream = "0.3"
 futures-core = "0.3"
+http = "1"
 prost = "0.13"
 prost-types = "0.13"
 serde = { version = "1", features = ["derive"], optional = true }

@@ -61,6 +61,13 @@ async fn write_schema_empty_rejected() {
 // ── Relationships ─────────────────────────────────────────────
 
 #[tokio::test]
+async fn write_relationships_empty_rejected() {
+    let c = client().await;
+    let err = c.write_relationships(vec![]).await.unwrap_err();
+    assert!(matches!(err, prescience::Error::InvalidArgument(_)));
+}
+
+#[tokio::test]
 async fn write_and_check_permission() {
     let c = client().await;
     c.write_schema(TEST_SCHEMA).await.unwrap();
