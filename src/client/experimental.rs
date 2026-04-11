@@ -5,6 +5,7 @@
 //! may still evolve.
 
 use std::collections::HashMap;
+use std::time::Duration;
 
 use futures_core::Stream;
 use tokio_stream::StreamExt;
@@ -61,6 +62,7 @@ pub struct BulkCheckPermissionsRequest<'a> {
     items: Vec<proto::CheckBulkPermissionsRequestItem>,
     consistency: Option<proto::Consistency>,
     with_tracing: bool,
+    timeout: Option<Duration>,
 }
 
 impl<'a> BulkCheckPermissionsRequest<'a> {
@@ -75,6 +77,12 @@ impl<'a> BulkCheckPermissionsRequest<'a> {
         self.with_tracing = enabled;
         self
     }
+
+    /// Sets a per-request timeout, overriding the client default for this request.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
 }
 
 impl<'a> std::future::IntoFuture for BulkCheckPermissionsRequest<'a> {
@@ -84,11 +92,16 @@ impl<'a> std::future::IntoFuture for BulkCheckPermissionsRequest<'a> {
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
-            let req = proto::CheckBulkPermissionsRequest {
+            let proto_req = proto::CheckBulkPermissionsRequest {
                 consistency: self.consistency,
                 items: self.items,
                 with_tracing: self.with_tracing,
             };
+
+            let mut req = tonic::Request::new(proto_req);
+            if let Some(t) = self.timeout {
+                req.set_timeout(t);
+            }
 
             let response = self
                 .client
@@ -181,6 +194,7 @@ pub struct BulkExportRelationshipsRequest<'a> {
     client: &'a Client,
     filter: Option<proto::RelationshipFilter>,
     consistency: Option<proto::Consistency>,
+    timeout: Option<Duration>,
 }
 
 impl<'a> BulkExportRelationshipsRequest<'a> {
@@ -190,14 +204,25 @@ impl<'a> BulkExportRelationshipsRequest<'a> {
         self
     }
 
+    /// Sets a per-request timeout, overriding the client default for this request.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
     /// Sends the request and returns a stream of relationships.
     pub async fn send(self) -> Result<impl Stream<Item = Result<Relationship, Error>>, Error> {
-        let req = proto::ExportBulkRelationshipsRequest {
+        let proto_req = proto::ExportBulkRelationshipsRequest {
             consistency: self.consistency,
             optional_limit: 0,
             optional_cursor: None,
             optional_relationship_filter: self.filter,
         };
+
+        let mut req = tonic::Request::new(proto_req);
+        if let Some(t) = self.timeout {
+            req.set_timeout(t);
+        }
 
         let response = self
             .client
@@ -255,6 +280,7 @@ impl Client {
             items: proto_items,
             consistency: None,
             with_tracing: false,
+            timeout: None,
         }
     }
 
@@ -283,6 +309,7 @@ impl Client {
             client: self,
             filter: Some((&filter).into()),
             consistency: None,
+            timeout: None,
         }
     }
 }

@@ -1,5 +1,7 @@
 //! WatchService RPC implementation (behind `watch` feature).
 
+use std::time::Duration;
+
 use futures_core::Stream;
 use tokio_stream::StreamExt;
 
@@ -14,6 +16,7 @@ pub struct WatchRequest<'a> {
     client: &'a Client,
     object_types: Vec<String>,
     start_cursor: Option<proto::ZedToken>,
+    timeout: Option<Duration>,
 }
 
 impl<'a> WatchRequest<'a> {
@@ -23,18 +26,29 @@ impl<'a> WatchRequest<'a> {
         self
     }
 
+    /// Sets a per-request timeout, overriding the client default for this request.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
     /// Sends the request and returns a long-lived stream of watch events.
     ///
     /// The stream does NOT auto-reconnect. On server disconnect, it yields
     /// `Err(Error::Status { code: UNAVAILABLE, .. })` then terminates.
     /// Use the checkpoint `ZedToken` from the last `WatchEvent` to resume.
     pub async fn send(self) -> Result<impl Stream<Item = Result<WatchEvent, Error>>, Error> {
-        let req = proto::WatchRequest {
+        let proto_req = proto::WatchRequest {
             optional_object_types: self.object_types,
             optional_start_cursor: self.start_cursor,
             optional_relationship_filters: vec![],
             optional_update_kinds: vec![],
         };
+
+        let mut req = tonic::Request::new(proto_req);
+        if let Some(t) = self.timeout {
+            req.set_timeout(t);
+        }
 
         let response = self
             .client
@@ -81,6 +95,7 @@ impl Client {
             client: self,
             object_types: object_types.into_iter().map(Into::into).collect(),
             start_cursor: None,
+            timeout: None,
         }
     }
 }

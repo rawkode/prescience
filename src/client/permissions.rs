@@ -1,6 +1,7 @@
 //! PermissionsService RPC implementations.
 
 use std::collections::HashMap;
+use std::time::Duration;
 
 use futures_core::Stream;
 use tokio_stream::StreamExt;
@@ -23,6 +24,7 @@ pub struct CheckPermissionRequest<'a> {
     consistency: Option<proto::Consistency>,
     context: Option<prost_types::Struct>,
     with_tracing: bool,
+    timeout: Option<Duration>,
 }
 
 impl<'a> CheckPermissionRequest<'a> {
@@ -43,6 +45,12 @@ impl<'a> CheckPermissionRequest<'a> {
         self.with_tracing = enabled;
         self
     }
+
+    /// Sets a per-request timeout, overriding the client default for this request.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
 }
 
 impl<'a> std::future::IntoFuture for CheckPermissionRequest<'a> {
@@ -52,7 +60,7 @@ impl<'a> std::future::IntoFuture for CheckPermissionRequest<'a> {
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
-            let req = proto::CheckPermissionRequest {
+            let proto_req = proto::CheckPermissionRequest {
                 consistency: self.consistency,
                 resource: Some(self.resource),
                 permission: self.permission,
@@ -60,6 +68,11 @@ impl<'a> std::future::IntoFuture for CheckPermissionRequest<'a> {
                 context: self.context,
                 with_tracing: self.with_tracing,
             };
+
+            let mut req = tonic::Request::new(proto_req);
+            if let Some(t) = self.timeout {
+                req.set_timeout(t);
+            }
 
             let response = self
                 .client
@@ -82,12 +95,19 @@ pub struct WriteRelationshipsRequest<'a> {
     client: &'a Client,
     updates: Vec<proto::RelationshipUpdate>,
     preconditions: Vec<proto::Precondition>,
+    timeout: Option<Duration>,
 }
 
 impl<'a> WriteRelationshipsRequest<'a> {
     /// Adds preconditions that must be satisfied before the write commits.
     pub fn preconditions(mut self, preconditions: Vec<Precondition>) -> Self {
         self.preconditions = preconditions.iter().map(Into::into).collect();
+        self
+    }
+
+    /// Sets a per-request timeout, overriding the client default for this request.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
         self
     }
 }
@@ -103,11 +123,16 @@ impl<'a> std::future::IntoFuture for WriteRelationshipsRequest<'a> {
                 return Err(Error::InvalidArgument("updates must not be empty".into()));
             }
 
-            let req = proto::WriteRelationshipsRequest {
+            let proto_req = proto::WriteRelationshipsRequest {
                 updates: self.updates,
                 optional_preconditions: self.preconditions,
                 optional_transaction_metadata: None,
             };
+
+            let mut req = tonic::Request::new(proto_req);
+            if let Some(t) = self.timeout {
+                req.set_timeout(t);
+            }
 
             let response = self
                 .client
@@ -133,12 +158,19 @@ pub struct DeleteRelationshipsRequest<'a> {
     client: &'a Client,
     filter: proto::RelationshipFilter,
     preconditions: Vec<proto::Precondition>,
+    timeout: Option<Duration>,
 }
 
 impl<'a> DeleteRelationshipsRequest<'a> {
     /// Adds preconditions that must be satisfied before the delete commits.
     pub fn preconditions(mut self, preconditions: Vec<Precondition>) -> Self {
         self.preconditions = preconditions.iter().map(Into::into).collect();
+        self
+    }
+
+    /// Sets a per-request timeout, overriding the client default for this request.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
         self
     }
 }
@@ -150,13 +182,18 @@ impl<'a> std::future::IntoFuture for DeleteRelationshipsRequest<'a> {
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
-            let req = proto::DeleteRelationshipsRequest {
+            let proto_req = proto::DeleteRelationshipsRequest {
                 relationship_filter: Some(self.filter),
                 optional_preconditions: self.preconditions,
                 optional_limit: 0,
                 optional_allow_partial_deletions: false,
                 optional_transaction_metadata: None,
             };
+
+            let mut req = tonic::Request::new(proto_req);
+            if let Some(t) = self.timeout {
+                req.set_timeout(t);
+            }
 
             let response = self
                 .client
@@ -185,6 +222,7 @@ pub struct LookupResourcesRequest<'a> {
     subject: proto::SubjectReference,
     consistency: Option<proto::Consistency>,
     context: Option<prost_types::Struct>,
+    timeout: Option<Duration>,
 }
 
 impl<'a> LookupResourcesRequest<'a> {
@@ -200,11 +238,17 @@ impl<'a> LookupResourcesRequest<'a> {
         self
     }
 
+    /// Sets a per-request timeout, overriding the client default for this request.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
     /// Sends the request and returns a stream of results.
     pub async fn send(
         self,
     ) -> Result<impl Stream<Item = Result<LookupResourceResult, Error>>, Error> {
-        let req = proto::LookupResourcesRequest {
+        let proto_req = proto::LookupResourcesRequest {
             consistency: self.consistency,
             resource_object_type: self.resource_type,
             permission: self.permission,
@@ -213,6 +257,11 @@ impl<'a> LookupResourcesRequest<'a> {
             optional_limit: 0,
             optional_cursor: None,
         };
+
+        let mut req = tonic::Request::new(proto_req);
+        if let Some(t) = self.timeout {
+            req.set_timeout(t);
+        }
 
         let response = self
             .client
@@ -240,6 +289,7 @@ pub struct LookupSubjectsRequest<'a> {
     optional_subject_relation: String,
     consistency: Option<proto::Consistency>,
     context: Option<prost_types::Struct>,
+    timeout: Option<Duration>,
 }
 
 impl<'a> LookupSubjectsRequest<'a> {
@@ -255,11 +305,17 @@ impl<'a> LookupSubjectsRequest<'a> {
         self
     }
 
+    /// Sets a per-request timeout, overriding the client default for this request.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
     /// Sends the request and returns a stream of results.
     pub async fn send(
         self,
     ) -> Result<impl Stream<Item = Result<LookupSubjectResult, Error>>, Error> {
-        let req = proto::LookupSubjectsRequest {
+        let proto_req = proto::LookupSubjectsRequest {
             consistency: self.consistency,
             resource: Some(self.resource),
             permission: self.permission,
@@ -270,6 +326,11 @@ impl<'a> LookupSubjectsRequest<'a> {
             optional_cursor: None,
             wildcard_option: 0,
         };
+
+        let mut req = tonic::Request::new(proto_req);
+        if let Some(t) = self.timeout {
+            req.set_timeout(t);
+        }
 
         let response = self
             .client
@@ -293,6 +354,7 @@ pub struct ReadRelationshipsRequest<'a> {
     client: &'a Client,
     filter: proto::RelationshipFilter,
     consistency: Option<proto::Consistency>,
+    timeout: Option<Duration>,
 }
 
 impl<'a> ReadRelationshipsRequest<'a> {
@@ -302,16 +364,27 @@ impl<'a> ReadRelationshipsRequest<'a> {
         self
     }
 
+    /// Sets a per-request timeout, overriding the client default for this request.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
     /// Sends the request and returns a stream of results.
     pub async fn send(
         self,
     ) -> Result<impl Stream<Item = Result<ReadRelationshipResult, Error>>, Error> {
-        let req = proto::ReadRelationshipsRequest {
+        let proto_req = proto::ReadRelationshipsRequest {
             consistency: self.consistency,
             relationship_filter: Some(self.filter),
             optional_limit: 0,
             optional_cursor: None,
         };
+
+        let mut req = tonic::Request::new(proto_req);
+        if let Some(t) = self.timeout {
+            req.set_timeout(t);
+        }
 
         let response = self
             .client
@@ -336,12 +409,19 @@ pub struct ExpandPermissionTreeRequest<'a> {
     resource: proto::ObjectReference,
     permission: String,
     consistency: Option<proto::Consistency>,
+    timeout: Option<Duration>,
 }
 
 impl<'a> ExpandPermissionTreeRequest<'a> {
     /// Sets the consistency mode.
     pub fn consistency(mut self, c: Consistency) -> Self {
         self.consistency = Some((&c).into());
+        self
+    }
+
+    /// Sets a per-request timeout, overriding the client default for this request.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
         self
     }
 }
@@ -353,11 +433,16 @@ impl<'a> std::future::IntoFuture for ExpandPermissionTreeRequest<'a> {
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
-            let req = proto::ExpandPermissionTreeRequest {
+            let proto_req = proto::ExpandPermissionTreeRequest {
                 consistency: self.consistency,
                 resource: Some(self.resource),
                 permission: self.permission,
             };
+
+            let mut req = tonic::Request::new(proto_req);
+            if let Some(t) = self.timeout {
+                req.set_timeout(t);
+            }
 
             let response = self
                 .client
@@ -397,6 +482,7 @@ impl Client {
             consistency: None,
             context: None,
             with_tracing: false,
+            timeout: None,
         }
     }
 
@@ -412,6 +498,7 @@ impl Client {
             client: self,
             updates: updates.iter().map(Into::into).collect(),
             preconditions: vec![],
+            timeout: None,
         }
     }
 
@@ -424,6 +511,7 @@ impl Client {
             client: self,
             filter: (&filter).into(),
             preconditions: vec![],
+            timeout: None,
         }
     }
 
@@ -443,6 +531,7 @@ impl Client {
             subject: subject.into(),
             consistency: None,
             context: None,
+            timeout: None,
         }
     }
 
@@ -463,6 +552,7 @@ impl Client {
             optional_subject_relation: String::new(),
             consistency: None,
             context: None,
+            timeout: None,
         }
     }
 
@@ -474,6 +564,7 @@ impl Client {
             client: self,
             filter: (&filter).into(),
             consistency: None,
+            timeout: None,
         }
     }
 
@@ -488,6 +579,7 @@ impl Client {
             resource: resource.into(),
             permission: permission.into(),
             consistency: None,
+            timeout: None,
         }
     }
 }
