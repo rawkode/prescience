@@ -527,15 +527,20 @@ async fn bulk_check_permissions() {
 
 #[tokio::test]
 async fn error_retryability_unavailable() {
-    // Simulate UNAVAILABLE error by connecting to wrong endpoint
-    let invalid_endpoint = "http://localhost:1";
-    let result = Client::new(invalid_endpoint, SPICEDB_TOKEN).await;
+    // Bind an ephemeral port then immediately close the listener.
+    // After the listener is dropped, any connection to that port gets
+    // ECONNREFUSED deterministically on all platforms.
+    let listener =
+        std::net::TcpListener::bind("127.0.0.1:0").expect("failed to bind ephemeral port");
+    let port = listener.local_addr().unwrap().port();
+    drop(listener); // port is now unreachable
+
+    let endpoint = format!("http://127.0.0.1:{}", port);
+    let result = Client::new(&endpoint, SPICEDB_TOKEN).await;
 
     match result {
         Err(e) => {
-            // Transport errors wrapping connection refused
-            // In practice, attempting operations on a disconnected client
-            // would yield UNAVAILABLE status errors which are retryable
+            // Connection refused is surfaced as a Transport error.
             assert!(
                 matches!(e, prescience::Error::Transport(_)),
                 "Expected transport error, got: {:?}",
@@ -647,34 +652,37 @@ async fn error_retryability_classification() {
 #[tokio::test]
 async fn timeout_behavior_with_deadline() {
     use std::time::Duration;
+    use tonic::transport::Endpoint;
 
-    let c = spicedb().await;
-
-    // Set an extremely short timeout that will likely trigger DEADLINE_EXCEEDED
-    // We write a relationship and then try to read with a very short timeout
-    let token = c
-        .write_relationships(vec![RelationshipUpdate::create(Relationship::new(
-            ObjectReference::new("document", "timeout-test").unwrap(),
-            "viewer",
-            SubjectReference::new(
-                ObjectReference::new("user", "timeout-user").unwrap(),
-                None::<String>,
-            )
-            .unwrap(),
-        ))])
+    // Create a "black-hole" server: accepts TCP connections but never sends any
+    // HTTP/2 data, so the gRPC handshake never completes and every RPC times out.
+    // This guarantees a deterministic DEADLINE_EXCEEDED result regardless of
+    // how fast the test machine is.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
-        .expect("write_relationships failed");
+        .expect("failed to bind black-hole listener");
+    let hung_port = listener.local_addr().unwrap().port();
 
-    // Use builder to create client with very short default timeout
-    let endpoint = format!("http://localhost:{}", spicedb_port().await);
-    let short_timeout_client = Client::builder(&endpoint, SPICEDB_TOKEN)
-        .default_timeout(Duration::from_nanos(1)) // Extremely short timeout
-        .build()
-        .await
-        .expect("failed to create client with timeout");
+    // Accept connections but never write any bytes — the HTTP/2 handshake stalls.
+    tokio::spawn(async move {
+        let mut held_sockets = Vec::new();
+        while let Ok((socket, _)) = listener.accept().await {
+            held_sockets.push(socket); // keep alive but silent
+        }
+    });
 
-    // Attempt operation that will likely timeout
-    let result = short_timeout_client
+    // Build a lazy channel so `connect()` doesn't block; the timeout covers
+    // the entire RPC including connection establishment.
+    let endpoint_str = format!("http://127.0.0.1:{}", hung_port);
+    let channel = Endpoint::from_shared(endpoint_str)
+        .expect("invalid endpoint")
+        .timeout(Duration::from_millis(500))
+        .connect_lazy();
+
+    let timeout_client =
+        Client::from_channel(channel, SPICEDB_TOKEN).expect("failed to create client");
+
+    let result = timeout_client
         .check_permission(
             &ObjectReference::new("document", "timeout-test").unwrap(),
             "view",
@@ -684,25 +692,22 @@ async fn timeout_behavior_with_deadline() {
             )
             .unwrap(),
         )
-        .consistency(Consistency::AtLeastAsFresh(token))
         .await;
 
-    // Verify timeout results in appropriate error
     match result {
         Err(e) => {
-            // Should be either DeadlineExceeded or a transport error
-            // DeadlineExceeded is retryable
-            if let Some(code) = e.code() {
-                if code == tonic::Code::DeadlineExceeded {
-                    assert!(e.is_retryable(), "DEADLINE_EXCEEDED should be retryable");
-                }
-            }
-            // Transport errors can also occur with very short timeouts
+            let code = e
+                .code()
+                .expect("expected a gRPC status code for a timeout error");
+            assert_eq!(
+                code,
+                tonic::Code::DeadlineExceeded,
+                "timeout should yield DEADLINE_EXCEEDED, got {:?}",
+                code
+            );
+            assert!(e.is_retryable(), "DEADLINE_EXCEEDED should be retryable");
         }
-        Ok(_) => {
-            // With such a short timeout, it's unlikely to succeed, but if it does,
-            // that's still acceptable for this test (fast network)
-        }
+        Ok(_) => panic!("Expected timeout error but the operation succeeded"),
     }
 }
 
@@ -778,10 +783,18 @@ async fn watch_resume_after_checkpoint() {
         .expect("resumed stream ended")
         .expect("resumed watch event error");
 
-    // Should have at least one update (the second relationship write)
+    // The resumed event must include the post-checkpoint write for this test,
+    // and must not replay the pre-checkpoint write.
+    let updates_debug = format!("{:?}", event.updates);
     assert!(
-        !event.updates.is_empty(),
-        "resumed watch should see new updates"
+        updates_debug.contains("resume-2"),
+        "resumed watch should include the post-checkpoint update; got: {}",
+        updates_debug
+    );
+    assert!(
+        !updates_debug.contains("resume-1"),
+        "resumed watch should not replay the pre-checkpoint update; got: {}",
+        updates_debug
     );
 }
 
@@ -823,13 +836,13 @@ async fn invalid_argument_error_mapping() {
     match result {
         Err(e) => {
             // Should get either local InvalidArgument validation or server INVALID_ARGUMENT
-            match e {
+            match &e {
                 prescience::Error::InvalidArgument(_) => {
                     // Local validation caught it
                 }
                 prescience::Error::Status { code, .. } => {
                     assert_eq!(
-                        code,
+                        *code,
                         tonic::Code::InvalidArgument,
                         "Expected INVALID_ARGUMENT from server"
                     );
@@ -887,8 +900,9 @@ async fn failed_precondition_error_mapping() {
             );
         }
         Ok(_) => {
-            // Some SpiceDB versions might handle this differently
-            // If it succeeds, verify the relationship is idempotent
+            panic!(
+                "Expected FAILED_PRECONDITION when relationship exists, but write succeeded"
+            );
         }
     }
 
@@ -935,73 +949,25 @@ async fn not_found_error_mapping() {
             assert!(!r.is_allowed().unwrap());
         }
         Err(e) => {
-            // Some error occurred, verify it's properly categorized
-            if let Some(_code) = e.code() {
-                assert!(!e.is_retryable(), "NOT_FOUND should not be retryable");
-            }
+            // Some error occurred; only validate NOT_FOUND behavior if the code is
+            // actually NOT_FOUND.
+            let code = e.code().expect("expected error to include a gRPC status code");
+            assert_eq!(code, tonic::Code::NotFound, "expected NOT_FOUND error");
+            assert!(!e.is_retryable(), "NOT_FOUND should not be retryable");
         }
     }
 }
 
-/// Helper to get the port of the shared SpiceDB container
+/// Returns the mapped port of the shared SpiceDB container.
+///
+/// Reuses the single shared-container initialization in `spicedb()` so that
+/// container startup, readiness retries, and schema installation remain defined
+/// in one place.
 async fn spicedb_port() -> u16 {
-    let shared = SPICEDB
-        .get_or_init(|| async {
-            let container = SpiceDbImage
-                .start()
-                .await
-                .expect("failed to start SpiceDB container");
-            let port = container
-                .get_host_port_ipv4(SPICEDB_GRPC_PORT.tcp())
-                .await
-                .expect("failed to get mapped port");
-            let endpoint = format!("http://localhost:{}", port);
-
-            let client = {
-                let mut last_err = None;
-                let mut result = None;
-                for _ in 0..30 {
-                    match Client::new(&endpoint, SPICEDB_TOKEN).await {
-                        Ok(c) => match c.read_schema().await {
-                            Ok(_) => {
-                                result = Some(c);
-                                break;
-                            }
-                            Err(ref e) if e.code() == Some(tonic::Code::NotFound) => {
-                                result = Some(c);
-                                break;
-                            }
-                            Err(e) => {
-                                last_err = Some(format!("{e}"));
-                                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                            }
-                        },
-                        Err(e) => {
-                            last_err = Some(format!("{e}"));
-                            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                        }
-                    }
-                }
-                result.unwrap_or_else(|| {
-                    panic!(
-                        "SpiceDB not ready after retries: {}",
-                        last_err.unwrap_or_default()
-                    )
-                })
-            };
-
-            client
-                .write_schema(TEST_SCHEMA)
-                .await
-                .expect("write_schema failed");
-
-            Arc::new(SharedSpiceDb {
-                _container: container,
-                port,
-                schema_written: true,
-            })
-        })
-        .await;
-
-    shared.port
+    // Ensure the shared container is initialized (and schema written) exactly once.
+    let _ = spicedb().await;
+    SPICEDB
+        .get()
+        .expect("SPICEDB should be initialized by spicedb()")
+        .port
 }
