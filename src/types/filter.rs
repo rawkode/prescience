@@ -7,13 +7,13 @@ use crate::types::{Relationship, ZedToken};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RelationshipFilter {
     /// Resource type to filter on.
-    pub resource_type: String,
+    resource_type: String,
     /// Optional resource ID.
-    pub optional_resource_id: Option<String>,
+    optional_resource_id: Option<String>,
     /// Optional relation name.
-    pub optional_relation: Option<String>,
+    optional_relation: Option<String>,
     /// Optional subject filter.
-    pub optional_subject_filter: Option<SubjectFilter>,
+    optional_subject_filter: Option<SubjectFilter>,
 }
 
 impl RelationshipFilter {
@@ -52,6 +52,26 @@ impl RelationshipFilter {
         self.optional_subject_filter = Some(filter);
         self
     }
+
+    /// Returns the resource type.
+    pub fn resource_type(&self) -> &str {
+        &self.resource_type
+    }
+
+    /// Returns the optional resource ID filter.
+    pub fn resource_id_filter(&self) -> Option<&str> {
+        self.optional_resource_id.as_deref()
+    }
+
+    /// Returns the optional relation filter.
+    pub fn relation_filter(&self) -> Option<&str> {
+        self.optional_relation.as_deref()
+    }
+
+    /// Returns the optional subject filter.
+    pub fn subject_filter_ref(&self) -> Option<&SubjectFilter> {
+        self.optional_subject_filter.as_ref()
+    }
 }
 
 impl From<&RelationshipFilter> for crate::proto::RelationshipFilter {
@@ -70,11 +90,11 @@ impl From<&RelationshipFilter> for crate::proto::RelationshipFilter {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SubjectFilter {
     /// The subject object type.
-    pub subject_type: String,
+    subject_type: String,
     /// Optional subject object ID.
-    pub optional_subject_id: Option<String>,
+    optional_subject_id: Option<String>,
     /// Optional relation on the subject.
-    pub optional_relation: Option<String>,
+    optional_relation: Option<String>,
 }
 
 impl SubjectFilter {
@@ -105,6 +125,21 @@ impl SubjectFilter {
     pub fn relation(mut self, relation: impl Into<String>) -> Self {
         self.optional_relation = Some(relation.into());
         self
+    }
+
+    /// Returns the subject type.
+    pub fn subject_type(&self) -> &str {
+        &self.subject_type
+    }
+
+    /// Returns the optional subject ID filter.
+    pub fn subject_id_filter(&self) -> Option<&str> {
+        self.optional_subject_id.as_deref()
+    }
+
+    /// Returns the optional relation filter on the subject.
+    pub fn relation_filter(&self) -> Option<&str> {
+        self.optional_relation.as_deref()
     }
 }
 
@@ -157,7 +192,7 @@ mod tests {
     #[test]
     fn relationship_filter_valid() {
         let f = RelationshipFilter::new("document").unwrap();
-        assert_eq!(f.resource_type, "document");
+        assert_eq!(f.resource_type(), "document");
     }
 
     #[test]
@@ -175,7 +210,7 @@ mod tests {
     #[test]
     fn subject_filter_valid() {
         let f = SubjectFilter::new("user").unwrap();
-        assert_eq!(f.subject_type, "user");
+        assert_eq!(f.subject_type(), "user");
     }
 
     #[test]

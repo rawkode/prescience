@@ -87,18 +87,20 @@ impl TryFrom<crate::proto::Relationship> for Relationship {
             .subject
             .ok_or_else(|| Error::Serialization("missing subject".into()))?
             .try_into()?;
-        let optional_caveat = proto.optional_caveat.map(|c| Caveat {
-            name: c.caveat_name,
-            context: c
-                .context
-                .map(|s| s.fields.into_iter().map(|(k, v)| (k, v.into())).collect())
-                .unwrap_or_default(),
-        });
-        Ok(Relationship {
-            resource,
-            relation: proto.relation,
-            subject,
-            optional_caveat,
+        let optional_caveat = proto
+            .optional_caveat
+            .map(|c| {
+                let context = c
+                    .context
+                    .map(|s| s.fields.into_iter().map(|(k, v)| (k, v.into())).collect())
+                    .unwrap_or_default();
+                Caveat::new(c.caveat_name, context)
+            })
+            .transpose()?;
+        let rel = Relationship::new(resource, proto.relation, subject)?;
+        Ok(match optional_caveat {
+            Some(c) => rel.with_caveat(c),
+            None => rel,
         })
     }
 }

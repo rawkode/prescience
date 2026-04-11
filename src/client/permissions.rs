@@ -13,6 +13,16 @@ use crate::types::*;
 
 use super::Client;
 
+/// Validates that a required string field is non-empty and non-whitespace.
+fn validate_non_empty(field: &str, value: &str) -> Result<(), Error> {
+    if value.trim().is_empty() {
+        return Err(Error::InvalidArgument(format!(
+            "{field} must not be empty"
+        )));
+    }
+    Ok(())
+}
+
 // ── CheckPermission ──────────────────────────────────────────────
 
 /// Builder for a CheckPermission request.
@@ -60,11 +70,7 @@ impl<'a> std::future::IntoFuture for CheckPermissionRequest<'a> {
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
-            if self.permission.trim().is_empty() {
-                return Err(Error::InvalidArgument(
-                    "permission must not be empty".into(),
-                ));
-            }
+            validate_non_empty("permission", &self.permission)?;
 
             let proto_req = proto::CheckPermissionRequest {
                 consistency: self.consistency,
@@ -254,16 +260,8 @@ impl<'a> LookupResourcesRequest<'a> {
     pub async fn send(
         self,
     ) -> Result<impl Stream<Item = Result<LookupResourceResult, Error>>, Error> {
-        if self.resource_type.trim().is_empty() {
-            return Err(Error::InvalidArgument(
-                "resource_type must not be empty".into(),
-            ));
-        }
-        if self.permission.trim().is_empty() {
-            return Err(Error::InvalidArgument(
-                "permission must not be empty".into(),
-            ));
-        }
+        validate_non_empty("resource_type", &self.resource_type)?;
+        validate_non_empty("permission", &self.permission)?;
 
         let proto_req = proto::LookupResourcesRequest {
             consistency: self.consistency,
@@ -332,16 +330,8 @@ impl<'a> LookupSubjectsRequest<'a> {
     pub async fn send(
         self,
     ) -> Result<impl Stream<Item = Result<LookupSubjectResult, Error>>, Error> {
-        if self.permission.trim().is_empty() {
-            return Err(Error::InvalidArgument(
-                "permission must not be empty".into(),
-            ));
-        }
-        if self.subject_type.trim().is_empty() {
-            return Err(Error::InvalidArgument(
-                "subject_type must not be empty".into(),
-            ));
-        }
+        validate_non_empty("permission", &self.permission)?;
+        validate_non_empty("subject_type", &self.subject_type)?;
 
         let proto_req = proto::LookupSubjectsRequest {
             consistency: self.consistency,
@@ -461,11 +451,7 @@ impl<'a> std::future::IntoFuture for ExpandPermissionTreeRequest<'a> {
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
-            if self.permission.trim().is_empty() {
-                return Err(Error::InvalidArgument(
-                    "permission must not be empty".into(),
-                ));
-            }
+            validate_non_empty("permission", &self.permission)?;
 
             let proto_req = proto::ExpandPermissionTreeRequest {
                 consistency: self.consistency,
