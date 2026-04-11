@@ -663,11 +663,13 @@ async fn timeout_behavior_with_deadline() {
         .expect("failed to bind black-hole listener");
     let hung_port = listener.local_addr().unwrap().port();
 
-    // Accept connections but never write any bytes — the HTTP/2 handshake stalls.
+    // Accept one connection but never write any bytes — the HTTP/2 handshake stalls.
+    // A single connection is all the test needs (one RPC → one connection).
     tokio::spawn(async move {
-        let mut held_sockets = Vec::new();
-        while let Ok((socket, _)) = listener.accept().await {
-            held_sockets.push(socket); // keep alive but silent
+        if let Ok((socket, _)) = listener.accept().await {
+            // Hold the socket open without responding so the timeout fires.
+            let _socket = socket;
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         }
     });
 
@@ -785,16 +787,23 @@ async fn watch_resume_after_checkpoint() {
 
     // The resumed event must include the post-checkpoint write for this test,
     // and must not replay the pre-checkpoint write.
-    let updates_debug = format!("{:?}", event.updates);
+    let has_resume_2 = event.updates.iter().any(|u| {
+        u.relationship.resource.object_id() == "resume-2"
+            && u.relationship.resource.object_type() == "document"
+    });
+    let has_resume_1 = event.updates.iter().any(|u| {
+        u.relationship.resource.object_id() == "resume-1"
+            && u.relationship.resource.object_type() == "document"
+    });
     assert!(
-        updates_debug.contains("resume-2"),
-        "resumed watch should include the post-checkpoint update; got: {}",
-        updates_debug
+        has_resume_2,
+        "resumed watch should include the post-checkpoint update (resume-2); got: {:?}",
+        event.updates
     );
     assert!(
-        !updates_debug.contains("resume-1"),
-        "resumed watch should not replay the pre-checkpoint update; got: {}",
-        updates_debug
+        !has_resume_1,
+        "resumed watch should not replay the pre-checkpoint update (resume-1); got: {:?}",
+        event.updates
     );
 }
 
