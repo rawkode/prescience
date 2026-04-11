@@ -226,13 +226,13 @@ impl<'a> BulkExportRelationshipsRequest<'a> {
         self
     }
 
-    fn to_request_parts(&self) -> (proto::ExportBulkRelationshipsRequest, Option<Duration>) {
+    fn to_request_parts(self) -> (proto::ExportBulkRelationshipsRequest, Option<Duration>) {
         (
             proto::ExportBulkRelationshipsRequest {
-                consistency: self.consistency.clone(),
+                consistency: self.consistency,
                 optional_limit: self.optional_limit.unwrap_or(0),
-                optional_cursor: self.optional_cursor.clone(),
-                optional_relationship_filter: self.filter.clone(),
+                optional_cursor: self.optional_cursor,
+                optional_relationship_filter: self.filter,
             },
             self.timeout,
         )
