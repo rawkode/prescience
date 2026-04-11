@@ -202,7 +202,7 @@ async fn write_and_check_permission() {
                 None::<String>,
             )
             .unwrap(),
-        ))])
+        ).unwrap())])
         .await
         .expect("write_relationships failed");
 
@@ -252,7 +252,7 @@ async fn read_relationships() {
                 "viewer",
                 SubjectReference::new(ObjectReference::new("user", "bob").unwrap(), None::<String>)
                     .unwrap(),
-            )),
+            ).unwrap()),
             RelationshipUpdate::create(Relationship::new(
                 ObjectReference::new("document", "read-1").unwrap(),
                 "editor",
@@ -261,12 +261,12 @@ async fn read_relationships() {
                     None::<String>,
                 )
                 .unwrap(),
-            )),
+            ).unwrap()),
         ])
         .await
         .unwrap();
 
-    let filter = RelationshipFilter::new("document").resource_id("read-1");
+    let filter = RelationshipFilter::new("document").unwrap().resource_id("read-1");
     let mut stream = c
         .read_relationships(filter)
         .consistency(Consistency::AtLeastAsFresh(token))
@@ -298,7 +298,7 @@ async fn lookup_resources() {
                     None::<String>,
                 )
                 .unwrap(),
-            )),
+            ).unwrap()),
             RelationshipUpdate::create(Relationship::new(
                 ObjectReference::new("document", "lr-2").unwrap(),
                 "editor",
@@ -307,7 +307,7 @@ async fn lookup_resources() {
                     None::<String>,
                 )
                 .unwrap(),
-            )),
+            ).unwrap()),
         ])
         .await
         .unwrap();
@@ -346,7 +346,7 @@ async fn lookup_subjects() {
                 "viewer",
                 SubjectReference::new(ObjectReference::new("user", "eve").unwrap(), None::<String>)
                     .unwrap(),
-            )),
+            ).unwrap()),
             RelationshipUpdate::create(Relationship::new(
                 ObjectReference::new("document", "ls-1").unwrap(),
                 "viewer",
@@ -355,7 +355,7 @@ async fn lookup_subjects() {
                     None::<String>,
                 )
                 .unwrap(),
-            )),
+            ).unwrap()),
         ])
         .await
         .unwrap();
@@ -391,7 +391,7 @@ async fn delete_relationships() {
                 None::<String>,
             )
             .unwrap(),
-        ))])
+        ).unwrap())])
         .await
         .unwrap();
 
@@ -413,6 +413,7 @@ async fn delete_relationships() {
     let del_token = c
         .delete_relationships(
             RelationshipFilter::new("document")
+                .unwrap()
                 .resource_id("del-1")
                 .relation("viewer"),
         )
@@ -456,7 +457,7 @@ async fn watch_receives_updates() {
             "viewer",
             SubjectReference::new(ObjectReference::new("user", "hal").unwrap(), None::<String>)
                 .unwrap(),
-        ))])
+        ).unwrap())])
         .await
         .unwrap();
     });
@@ -489,7 +490,7 @@ async fn bulk_check_permissions() {
                 None::<String>,
             )
             .unwrap(),
-        ))])
+        ).unwrap())])
         .await
         .unwrap();
 

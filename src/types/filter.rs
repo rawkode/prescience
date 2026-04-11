@@ -18,13 +18,21 @@ pub struct RelationshipFilter {
 
 impl RelationshipFilter {
     /// Creates a new filter for the given resource type.
-    pub fn new(resource_type: impl Into<String>) -> Self {
-        Self {
-            resource_type: resource_type.into(),
+    ///
+    /// Returns `Err` if `resource_type` is empty or whitespace-only.
+    pub fn new(resource_type: impl Into<String>) -> Result<Self, Error> {
+        let resource_type = resource_type.into();
+        if resource_type.trim().is_empty() {
+            return Err(Error::InvalidArgument(
+                "resource_type must not be empty".into(),
+            ));
+        }
+        Ok(Self {
+            resource_type,
             optional_resource_id: None,
             optional_relation: None,
             optional_subject_filter: None,
-        }
+        })
     }
 
     /// Adds a resource ID filter.
@@ -71,12 +79,20 @@ pub struct SubjectFilter {
 
 impl SubjectFilter {
     /// Creates a new subject filter for the given type.
-    pub fn new(subject_type: impl Into<String>) -> Self {
-        Self {
-            subject_type: subject_type.into(),
+    ///
+    /// Returns `Err` if `subject_type` is empty or whitespace-only.
+    pub fn new(subject_type: impl Into<String>) -> Result<Self, Error> {
+        let subject_type = subject_type.into();
+        if subject_type.trim().is_empty() {
+            return Err(Error::InvalidArgument(
+                "subject_type must not be empty".into(),
+            ));
+        }
+        Ok(Self {
+            subject_type,
             optional_subject_id: None,
             optional_relation: None,
-        }
+        })
     }
 
     /// Adds a subject ID filter.
@@ -131,5 +147,46 @@ impl ReadRelationshipResult {
             relationship,
             read_at,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relationship_filter_valid() {
+        let f = RelationshipFilter::new("document").unwrap();
+        assert_eq!(f.resource_type, "document");
+    }
+
+    #[test]
+    fn relationship_filter_empty_type_rejected() {
+        let err = RelationshipFilter::new("").unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn relationship_filter_whitespace_type_rejected() {
+        let err = RelationshipFilter::new("   ").unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn subject_filter_valid() {
+        let f = SubjectFilter::new("user").unwrap();
+        assert_eq!(f.subject_type, "user");
+    }
+
+    #[test]
+    fn subject_filter_empty_type_rejected() {
+        let err = SubjectFilter::new("").unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn subject_filter_whitespace_type_rejected() {
+        let err = SubjectFilter::new("  ").unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
     }
 }

@@ -60,6 +60,12 @@ impl<'a> std::future::IntoFuture for CheckPermissionRequest<'a> {
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
+            if self.permission.trim().is_empty() {
+                return Err(Error::InvalidArgument(
+                    "permission must not be empty".into(),
+                ));
+            }
+
             let proto_req = proto::CheckPermissionRequest {
                 consistency: self.consistency,
                 resource: Some(self.resource),
@@ -248,6 +254,17 @@ impl<'a> LookupResourcesRequest<'a> {
     pub async fn send(
         self,
     ) -> Result<impl Stream<Item = Result<LookupResourceResult, Error>>, Error> {
+        if self.resource_type.trim().is_empty() {
+            return Err(Error::InvalidArgument(
+                "resource_type must not be empty".into(),
+            ));
+        }
+        if self.permission.trim().is_empty() {
+            return Err(Error::InvalidArgument(
+                "permission must not be empty".into(),
+            ));
+        }
+
         let proto_req = proto::LookupResourcesRequest {
             consistency: self.consistency,
             resource_object_type: self.resource_type,
@@ -315,6 +332,17 @@ impl<'a> LookupSubjectsRequest<'a> {
     pub async fn send(
         self,
     ) -> Result<impl Stream<Item = Result<LookupSubjectResult, Error>>, Error> {
+        if self.permission.trim().is_empty() {
+            return Err(Error::InvalidArgument(
+                "permission must not be empty".into(),
+            ));
+        }
+        if self.subject_type.trim().is_empty() {
+            return Err(Error::InvalidArgument(
+                "subject_type must not be empty".into(),
+            ));
+        }
+
         let proto_req = proto::LookupSubjectsRequest {
             consistency: self.consistency,
             resource: Some(self.resource),
@@ -433,6 +461,12 @@ impl<'a> std::future::IntoFuture for ExpandPermissionTreeRequest<'a> {
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
+            if self.permission.trim().is_empty() {
+                return Err(Error::InvalidArgument(
+                    "permission must not be empty".into(),
+                ));
+            }
+
             let proto_req = proto::ExpandPermissionTreeRequest {
                 consistency: self.consistency,
                 resource: Some(self.resource),
@@ -581,5 +615,107 @@ impl Client {
             consistency: None,
             timeout: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Client, ObjectReference, SubjectReference};
+
+    /// Creates a throwaway `Client` pointed at a dummy address using a lazy
+    /// channel that does not connect until the first RPC attempt.
+    fn dummy_client() -> Client {
+        let channel = tonic::transport::Endpoint::from_static("http://127.0.0.1:1")
+            .connect_lazy();
+        Client::from_channel(channel, "test-token").expect("client construction failed")
+    }
+
+    #[tokio::test]
+    async fn check_permission_empty_permission_rejected() {
+        let c = dummy_client();
+        let resource = ObjectReference::new("document", "doc1").unwrap();
+        let subject = SubjectReference::new(
+            ObjectReference::new("user", "alice").unwrap(),
+            None::<String>,
+        )
+        .unwrap();
+        let err = c.check_permission(&resource, "", &subject).await.unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
+    }
+
+    #[tokio::test]
+    async fn check_permission_whitespace_permission_rejected() {
+        let c = dummy_client();
+        let resource = ObjectReference::new("document", "doc1").unwrap();
+        let subject = SubjectReference::new(
+            ObjectReference::new("user", "alice").unwrap(),
+            None::<String>,
+        )
+        .unwrap();
+        let err = c.check_permission(&resource, "  ", &subject).await.unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
+    }
+
+    #[tokio::test]
+    async fn lookup_resources_empty_permission_rejected() {
+        let c = dummy_client();
+        let subject = SubjectReference::new(
+            ObjectReference::new("user", "alice").unwrap(),
+            None::<String>,
+        )
+        .unwrap();
+        let result = c.lookup_resources("document", "", &subject).send().await;
+        assert!(matches!(result, Err(Error::InvalidArgument(_))));
+    }
+
+    #[tokio::test]
+    async fn lookup_resources_empty_resource_type_rejected() {
+        let c = dummy_client();
+        let subject = SubjectReference::new(
+            ObjectReference::new("user", "alice").unwrap(),
+            None::<String>,
+        )
+        .unwrap();
+        let result = c.lookup_resources("", "view", &subject).send().await;
+        assert!(matches!(result, Err(Error::InvalidArgument(_))));
+    }
+
+    #[tokio::test]
+    async fn lookup_subjects_empty_permission_rejected() {
+        let c = dummy_client();
+        let resource = ObjectReference::new("document", "doc1").unwrap();
+        let result = c.lookup_subjects(&resource, "", "user").send().await;
+        assert!(matches!(result, Err(Error::InvalidArgument(_))));
+    }
+
+    #[tokio::test]
+    async fn lookup_subjects_empty_subject_type_rejected() {
+        let c = dummy_client();
+        let resource = ObjectReference::new("document", "doc1").unwrap();
+        let result = c.lookup_subjects(&resource, "view", "").send().await;
+        assert!(matches!(result, Err(Error::InvalidArgument(_))));
+    }
+
+    #[tokio::test]
+    async fn expand_permission_tree_empty_permission_rejected() {
+        let c = dummy_client();
+        let resource = ObjectReference::new("document", "doc1").unwrap();
+        let err = c
+            .expand_permission_tree(&resource, "")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
+    }
+
+    #[tokio::test]
+    async fn expand_permission_tree_whitespace_permission_rejected() {
+        let c = dummy_client();
+        let resource = ObjectReference::new("document", "doc1").unwrap();
+        let err = c
+            .expand_permission_tree(&resource, "   ")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
     }
 }
