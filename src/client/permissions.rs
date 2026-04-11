@@ -222,6 +222,8 @@ pub struct LookupResourcesRequest<'a> {
     subject: proto::SubjectReference,
     consistency: Option<proto::Consistency>,
     context: Option<prost_types::Struct>,
+    optional_limit: Option<u32>,
+    optional_cursor: Option<proto::Cursor>,
     timeout: Option<Duration>,
 }
 
@@ -238,33 +240,54 @@ impl<'a> LookupResourcesRequest<'a> {
         self
     }
 
+    /// Sets the maximum number of resources to return before the server closes the stream.
+    pub fn limit(mut self, limit: u32) -> Self {
+        self.optional_limit = Some(limit);
+        self
+    }
+
+    /// Sets the cursor after which results should resume.
+    pub fn cursor(mut self, cursor: impl Into<String>) -> Self {
+        self.optional_cursor = Some(proto::Cursor {
+            token: cursor.into(),
+        });
+        self
+    }
+
     /// Sets a per-request timeout, overriding the client default for this request.
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
         self
     }
 
+    fn to_request_parts(&self) -> (proto::LookupResourcesRequest, Option<Duration>) {
+        (
+            proto::LookupResourcesRequest {
+                consistency: self.consistency.clone(),
+                resource_object_type: self.resource_type.clone(),
+                permission: self.permission.clone(),
+                subject: Some(self.subject.clone()),
+                context: self.context.clone(),
+                optional_limit: self.optional_limit.unwrap_or(0),
+                optional_cursor: self.optional_cursor.clone(),
+            },
+            self.timeout,
+        )
+    }
+
     /// Sends the request and returns a stream of results.
     pub async fn send(
         self,
     ) -> Result<impl Stream<Item = Result<LookupResourceResult, Error>>, Error> {
-        let proto_req = proto::LookupResourcesRequest {
-            consistency: self.consistency,
-            resource_object_type: self.resource_type,
-            permission: self.permission,
-            subject: Some(self.subject),
-            context: self.context,
-            optional_limit: 0,
-            optional_cursor: None,
-        };
+        let client = self.client;
+        let (proto_req, timeout) = self.to_request_parts();
 
         let mut req = tonic::Request::new(proto_req);
-        if let Some(t) = self.timeout {
+        if let Some(t) = timeout {
             req.set_timeout(t);
         }
 
-        let response = self
-            .client
+        let response = client
             .permissions
             .clone()
             .lookup_resources(req)
@@ -289,6 +312,8 @@ pub struct LookupSubjectsRequest<'a> {
     optional_subject_relation: String,
     consistency: Option<proto::Consistency>,
     context: Option<prost_types::Struct>,
+    optional_concrete_limit: Option<u32>,
+    optional_cursor: Option<proto::Cursor>,
     timeout: Option<Duration>,
 }
 
@@ -305,35 +330,56 @@ impl<'a> LookupSubjectsRequest<'a> {
         self
     }
 
+    /// Sets the maximum number of subjects to return before the server closes the stream.
+    pub fn limit(mut self, limit: u32) -> Self {
+        self.optional_concrete_limit = Some(limit);
+        self
+    }
+
+    /// Sets the cursor after which results should resume.
+    pub fn cursor(mut self, cursor: impl Into<String>) -> Self {
+        self.optional_cursor = Some(proto::Cursor {
+            token: cursor.into(),
+        });
+        self
+    }
+
     /// Sets a per-request timeout, overriding the client default for this request.
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
         self
     }
 
+    fn to_request_parts(&self) -> (proto::LookupSubjectsRequest, Option<Duration>) {
+        (
+            proto::LookupSubjectsRequest {
+                consistency: self.consistency.clone(),
+                resource: Some(self.resource.clone()),
+                permission: self.permission.clone(),
+                subject_object_type: self.subject_type.clone(),
+                optional_subject_relation: self.optional_subject_relation.clone(),
+                context: self.context.clone(),
+                optional_concrete_limit: self.optional_concrete_limit.unwrap_or(0),
+                optional_cursor: self.optional_cursor.clone(),
+                wildcard_option: 0,
+            },
+            self.timeout,
+        )
+    }
+
     /// Sends the request and returns a stream of results.
     pub async fn send(
         self,
     ) -> Result<impl Stream<Item = Result<LookupSubjectResult, Error>>, Error> {
-        let proto_req = proto::LookupSubjectsRequest {
-            consistency: self.consistency,
-            resource: Some(self.resource),
-            permission: self.permission,
-            subject_object_type: self.subject_type,
-            optional_subject_relation: self.optional_subject_relation,
-            context: self.context,
-            optional_concrete_limit: 0,
-            optional_cursor: None,
-            wildcard_option: 0,
-        };
+        let client = self.client;
+        let (proto_req, timeout) = self.to_request_parts();
 
         let mut req = tonic::Request::new(proto_req);
-        if let Some(t) = self.timeout {
+        if let Some(t) = timeout {
             req.set_timeout(t);
         }
 
-        let response = self
-            .client
+        let response = client
             .permissions
             .clone()
             .lookup_subjects(req)
@@ -354,6 +400,8 @@ pub struct ReadRelationshipsRequest<'a> {
     client: &'a Client,
     filter: proto::RelationshipFilter,
     consistency: Option<proto::Consistency>,
+    optional_limit: Option<u32>,
+    optional_cursor: Option<proto::Cursor>,
     timeout: Option<Duration>,
 }
 
@@ -370,24 +418,45 @@ impl<'a> ReadRelationshipsRequest<'a> {
         self
     }
 
+    /// Sets the maximum number of relationships to return before the server closes the stream.
+    pub fn limit(mut self, limit: u32) -> Self {
+        self.optional_limit = Some(limit);
+        self
+    }
+
+    /// Sets the cursor after which results should resume.
+    pub fn cursor(mut self, cursor: impl Into<String>) -> Self {
+        self.optional_cursor = Some(proto::Cursor {
+            token: cursor.into(),
+        });
+        self
+    }
+
+    fn to_request_parts(&self) -> (proto::ReadRelationshipsRequest, Option<Duration>) {
+        (
+            proto::ReadRelationshipsRequest {
+                consistency: self.consistency.clone(),
+                relationship_filter: Some(self.filter.clone()),
+                optional_limit: self.optional_limit.unwrap_or(0),
+                optional_cursor: self.optional_cursor.clone(),
+            },
+            self.timeout,
+        )
+    }
+
     /// Sends the request and returns a stream of results.
     pub async fn send(
         self,
     ) -> Result<impl Stream<Item = Result<ReadRelationshipResult, Error>>, Error> {
-        let proto_req = proto::ReadRelationshipsRequest {
-            consistency: self.consistency,
-            relationship_filter: Some(self.filter),
-            optional_limit: 0,
-            optional_cursor: None,
-        };
+        let client = self.client;
+        let (proto_req, timeout) = self.to_request_parts();
 
         let mut req = tonic::Request::new(proto_req);
-        if let Some(t) = self.timeout {
+        if let Some(t) = timeout {
             req.set_timeout(t);
         }
 
-        let response = self
-            .client
+        let response = client
             .permissions
             .clone()
             .read_relationships(req)
@@ -531,6 +600,8 @@ impl Client {
             subject: subject.into(),
             consistency: None,
             context: None,
+            optional_limit: None,
+            optional_cursor: None,
             timeout: None,
         }
     }
@@ -552,6 +623,8 @@ impl Client {
             optional_subject_relation: String::new(),
             consistency: None,
             context: None,
+            optional_concrete_limit: None,
+            optional_cursor: None,
             timeout: None,
         }
     }
@@ -564,6 +637,8 @@ impl Client {
             client: self,
             filter: (&filter).into(),
             consistency: None,
+            optional_limit: None,
+            optional_cursor: None,
             timeout: None,
         }
     }
@@ -581,5 +656,116 @@ impl Client {
             consistency: None,
             timeout: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tonic::transport::Channel;
+
+    fn test_client() -> Client {
+        let channel = Channel::from_static("http://[::1]:50051").connect_lazy();
+        Client::from_channel(channel, "test-token").unwrap()
+    }
+
+    fn test_subject(id: &str) -> SubjectReference {
+        SubjectReference::new(ObjectReference::new("user", id).unwrap(), None::<String>).unwrap()
+    }
+
+    #[tokio::test]
+    async fn lookup_resources_pagination_defaults() {
+        let client = test_client();
+        let subject = test_subject("alice");
+
+        let (proto_req, timeout) = client
+            .lookup_resources("document", "view", &subject)
+            .to_request_parts();
+
+        assert_eq!(proto_req.optional_limit, 0);
+        assert!(proto_req.optional_cursor.is_none());
+        assert!(timeout.is_none());
+    }
+
+    #[tokio::test]
+    async fn lookup_resources_pagination_customized() {
+        let client = test_client();
+        let subject = test_subject("bob");
+
+        let (proto_req, _) = client
+            .lookup_resources("document", "edit", &subject)
+            .limit(50)
+            .cursor("resource-cursor")
+            .to_request_parts();
+
+        assert_eq!(proto_req.optional_limit, 50);
+        assert_eq!(
+            proto_req.optional_cursor.as_ref().map(|c| c.token.as_str()),
+            Some("resource-cursor")
+        );
+    }
+
+    #[tokio::test]
+    async fn lookup_subjects_pagination_defaults() {
+        let client = test_client();
+        let resource = ObjectReference::new("document", "doc1").unwrap();
+
+        let (proto_req, timeout) = client
+            .lookup_subjects(&resource, "view", "user")
+            .to_request_parts();
+
+        assert_eq!(proto_req.optional_concrete_limit, 0);
+        assert!(proto_req.optional_cursor.is_none());
+        assert!(timeout.is_none());
+    }
+
+    #[tokio::test]
+    async fn lookup_subjects_pagination_customized() {
+        let client = test_client();
+        let resource = ObjectReference::new("document", "doc2").unwrap();
+
+        let (proto_req, _) = client
+            .lookup_subjects(&resource, "view", "user")
+            .limit(10)
+            .cursor("subjects-cursor")
+            .to_request_parts();
+
+        assert_eq!(proto_req.optional_concrete_limit, 10);
+        assert_eq!(
+            proto_req.optional_cursor.as_ref().map(|c| c.token.as_str()),
+            Some("subjects-cursor")
+        );
+    }
+
+    #[tokio::test]
+    async fn read_relationships_pagination_defaults() {
+        let client = test_client();
+        let filter = RelationshipFilter::new("document").resource_id("rel1");
+
+        let (proto_req, timeout) = client
+            .read_relationships(filter)
+            .to_request_parts();
+
+        assert_eq!(proto_req.optional_limit, 0);
+        assert!(proto_req.optional_cursor.is_none());
+        assert!(timeout.is_none());
+    }
+
+    #[tokio::test]
+    async fn read_relationships_pagination_customized() {
+        let client = test_client();
+        let filter = RelationshipFilter::new("document").resource_id("rel2");
+
+        let (proto_req, _) = client
+            .read_relationships(filter)
+            .limit(5)
+            .cursor("rels-cursor")
+            .to_request_parts();
+
+        assert_eq!(proto_req.optional_limit, 5);
+        assert_eq!(
+            proto_req.optional_cursor.as_ref().map(|c| c.token.as_str()),
+            Some("rels-cursor")
+        );
     }
 }

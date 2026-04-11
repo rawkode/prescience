@@ -194,6 +194,8 @@ pub struct BulkExportRelationshipsRequest<'a> {
     client: &'a Client,
     filter: Option<proto::RelationshipFilter>,
     consistency: Option<proto::Consistency>,
+    optional_limit: Option<u32>,
+    optional_cursor: Option<proto::Cursor>,
     timeout: Option<Duration>,
 }
 
@@ -204,28 +206,49 @@ impl<'a> BulkExportRelationshipsRequest<'a> {
         self
     }
 
+    /// Sets the maximum number of relationships to return in a single page.
+    pub fn limit(mut self, limit: u32) -> Self {
+        self.optional_limit = Some(limit);
+        self
+    }
+
+    /// Sets the cursor after which results should resume.
+    pub fn cursor(mut self, cursor: impl Into<String>) -> Self {
+        self.optional_cursor = Some(proto::Cursor {
+            token: cursor.into(),
+        });
+        self
+    }
+
     /// Sets a per-request timeout, overriding the client default for this request.
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
         self
     }
 
+    fn to_request_parts(&self) -> (proto::ExportBulkRelationshipsRequest, Option<Duration>) {
+        (
+            proto::ExportBulkRelationshipsRequest {
+                consistency: self.consistency.clone(),
+                optional_limit: self.optional_limit.unwrap_or(0),
+                optional_cursor: self.optional_cursor.clone(),
+                optional_relationship_filter: self.filter.clone(),
+            },
+            self.timeout,
+        )
+    }
+
     /// Sends the request and returns a stream of relationships.
     pub async fn send(self) -> Result<impl Stream<Item = Result<Relationship, Error>>, Error> {
-        let proto_req = proto::ExportBulkRelationshipsRequest {
-            consistency: self.consistency,
-            optional_limit: 0,
-            optional_cursor: None,
-            optional_relationship_filter: self.filter,
-        };
+        let client = self.client;
+        let (proto_req, timeout) = self.to_request_parts();
 
         let mut req = tonic::Request::new(proto_req);
-        if let Some(t) = self.timeout {
+        if let Some(t) = timeout {
             req.set_timeout(t);
         }
 
-        let response = self
-            .client
+        let response = client
             .permissions
             .clone()
             .export_bulk_relationships(req)
@@ -309,7 +332,52 @@ impl Client {
             client: self,
             filter: Some((&filter).into()),
             consistency: None,
+            optional_limit: None,
+            optional_cursor: None,
             timeout: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tonic::transport::Channel;
+
+    fn test_client() -> Client {
+        let channel = Channel::from_static("http://[::1]:50051").connect_lazy();
+        Client::from_channel(channel, "test-token").unwrap()
+    }
+
+    #[tokio::test]
+    async fn bulk_export_pagination_defaults() {
+        let client = test_client();
+        let filter = RelationshipFilter::new("document");
+
+        let (proto_req, timeout) = client
+            .bulk_export_relationships(filter)
+            .to_request_parts();
+
+        assert_eq!(proto_req.optional_limit, 0);
+        assert!(proto_req.optional_cursor.is_none());
+        assert!(timeout.is_none());
+    }
+
+    #[tokio::test]
+    async fn bulk_export_pagination_customized() {
+        let client = test_client();
+        let filter = RelationshipFilter::new("document");
+
+        let (proto_req, _) = client
+            .bulk_export_relationships(filter)
+            .limit(500)
+            .cursor("bulk-cursor")
+            .to_request_parts();
+
+        assert_eq!(proto_req.optional_limit, 500);
+        assert_eq!(
+            proto_req.optional_cursor.as_ref().map(|c| c.token.as_str()),
+            Some("bulk-cursor")
+        );
     }
 }
