@@ -60,12 +60,19 @@ pub struct BulkCheckPermissionsRequest<'a> {
     client: &'a Client,
     items: Vec<proto::CheckBulkPermissionsRequestItem>,
     consistency: Option<proto::Consistency>,
+    with_tracing: bool,
 }
 
 impl<'a> BulkCheckPermissionsRequest<'a> {
     /// Sets the consistency mode.
     pub fn consistency(mut self, c: Consistency) -> Self {
         self.consistency = Some((&c).into());
+        self
+    }
+
+    /// Enables request-level tracing metadata in the response.
+    pub fn with_tracing(mut self, enabled: bool) -> Self {
+        self.with_tracing = enabled;
         self
     }
 }
@@ -80,7 +87,7 @@ impl<'a> std::future::IntoFuture for BulkCheckPermissionsRequest<'a> {
             let req = proto::CheckBulkPermissionsRequest {
                 consistency: self.consistency,
                 items: self.items,
-                with_tracing: false,
+                with_tracing: self.with_tracing,
             };
 
             let response = self
@@ -247,6 +254,7 @@ impl Client {
             client: self,
             items: proto_items,
             consistency: None,
+            with_tracing: false,
         }
     }
 

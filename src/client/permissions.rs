@@ -22,6 +22,7 @@ pub struct CheckPermissionRequest<'a> {
     subject: proto::SubjectReference,
     consistency: Option<proto::Consistency>,
     context: Option<prost_types::Struct>,
+    with_tracing: bool,
 }
 
 impl<'a> CheckPermissionRequest<'a> {
@@ -34,6 +35,12 @@ impl<'a> CheckPermissionRequest<'a> {
     /// Sets the caveat evaluation context for this request.
     pub fn context(mut self, ctx: HashMap<String, ContextValue>) -> Self {
         self.context = Some(context_to_struct(&ctx));
+        self
+    }
+
+    /// Enables request-level tracing metadata in the response.
+    pub fn with_tracing(mut self, enabled: bool) -> Self {
+        self.with_tracing = enabled;
         self
     }
 }
@@ -51,7 +58,7 @@ impl<'a> std::future::IntoFuture for CheckPermissionRequest<'a> {
                 permission: self.permission,
                 subject: Some(self.subject),
                 context: self.context,
-                with_tracing: false,
+                with_tracing: self.with_tracing,
             };
 
             let response = self
@@ -389,6 +396,7 @@ impl Client {
             subject: subject.into(),
             consistency: None,
             context: None,
+            with_tracing: false,
         }
     }
 
