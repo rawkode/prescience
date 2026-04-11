@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(jj new:*)",
-      "Bash(jj describe:*)"
+      "Bash(jj describe:*)",
+      "Bash(gh run:*)"
     ]
   }
 }

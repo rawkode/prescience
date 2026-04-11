@@ -418,11 +418,7 @@ mod tests {
             type_url: "type.googleapis.com/some.Unknown".to_string(),
             value: vec![1, 2, 3],
         };
-        let status = status_with_details(
-            tonic::Code::Internal,
-            "with unknown",
-            vec![unknown],
-        );
+        let status = status_with_details(tonic::Code::Internal, "with unknown", vec![unknown]);
         let err = Error::from_status(status);
         match &err {
             Error::Status { details, .. } => {
