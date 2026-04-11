@@ -260,16 +260,16 @@ impl<'a> LookupResourcesRequest<'a> {
         self
     }
 
-    fn to_request_parts(&self) -> (proto::LookupResourcesRequest, Option<Duration>) {
+    fn to_request_parts(self) -> (proto::LookupResourcesRequest, Option<Duration>) {
         (
             proto::LookupResourcesRequest {
-                consistency: self.consistency.clone(),
-                resource_object_type: self.resource_type.clone(),
-                permission: self.permission.clone(),
-                subject: Some(self.subject.clone()),
-                context: self.context.clone(),
+                consistency: self.consistency,
+                resource_object_type: self.resource_type,
+                permission: self.permission,
+                subject: Some(self.subject),
+                context: self.context,
                 optional_limit: self.optional_limit.unwrap_or(0),
-                optional_cursor: self.optional_cursor.clone(),
+                optional_cursor: self.optional_cursor,
             },
             self.timeout,
         )
@@ -350,17 +350,17 @@ impl<'a> LookupSubjectsRequest<'a> {
         self
     }
 
-    fn to_request_parts(&self) -> (proto::LookupSubjectsRequest, Option<Duration>) {
+    fn to_request_parts(self) -> (proto::LookupSubjectsRequest, Option<Duration>) {
         (
             proto::LookupSubjectsRequest {
-                consistency: self.consistency.clone(),
-                resource: Some(self.resource.clone()),
-                permission: self.permission.clone(),
-                subject_object_type: self.subject_type.clone(),
-                optional_subject_relation: self.optional_subject_relation.clone(),
-                context: self.context.clone(),
+                consistency: self.consistency,
+                resource: Some(self.resource),
+                permission: self.permission,
+                subject_object_type: self.subject_type,
+                optional_subject_relation: self.optional_subject_relation,
+                context: self.context,
                 optional_concrete_limit: self.optional_concrete_limit.unwrap_or(0),
-                optional_cursor: self.optional_cursor.clone(),
+                optional_cursor: self.optional_cursor,
                 wildcard_option: 0,
             },
             self.timeout,
@@ -432,15 +432,24 @@ impl<'a> ReadRelationshipsRequest<'a> {
         self
     }
 
-    fn to_request_parts(&self) -> (proto::ReadRelationshipsRequest, Option<Duration>) {
+    fn to_request_parts(self) -> (proto::ReadRelationshipsRequest, Option<Duration>) {
+        let Self {
+            client: _,
+            filter,
+            consistency,
+            optional_limit,
+            optional_cursor,
+            timeout,
+        } = self;
+
         (
             proto::ReadRelationshipsRequest {
-                consistency: self.consistency.clone(),
-                relationship_filter: Some(self.filter.clone()),
-                optional_limit: self.optional_limit.unwrap_or(0),
-                optional_cursor: self.optional_cursor.clone(),
+                consistency,
+                relationship_filter: Some(filter),
+                optional_limit: optional_limit.unwrap_or(0),
+                optional_cursor,
             },
-            self.timeout,
+            timeout,
         )
     }
 
