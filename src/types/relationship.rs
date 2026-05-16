@@ -16,11 +16,19 @@ pub struct Caveat {
 
 impl Caveat {
     /// Creates a new caveat with the given name and context.
-    pub fn new(name: impl Into<String>, context: HashMap<String, ContextValue>) -> Self {
-        Self {
-            name: name.into(),
-            context,
+    ///
+    /// Returns `Err` if `name` is empty or whitespace-only.
+    pub fn new(name: impl Into<String>, context: HashMap<String, ContextValue>) -> Result<Self, Error> {
+        let name = name.into();
+        if name.trim().is_empty() {
+            return Err(Error::InvalidArgument(
+                "caveat name must not be empty".into(),
+            ));
         }
+        Ok(Self {
+            name,
+            context,
+        })
     }
 }
 
@@ -39,17 +47,25 @@ pub struct Relationship {
 
 impl Relationship {
     /// Creates a new relationship without a caveat.
+    ///
+    /// Returns `Err` if `relation` is empty or whitespace-only.
     pub fn new(
         resource: ObjectReference,
         relation: impl Into<String>,
         subject: SubjectReference,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, Error> {
+        let relation = relation.into();
+        if relation.trim().is_empty() {
+            return Err(Error::InvalidArgument(
+                "relation must not be empty".into(),
+            ));
+        }
+        Ok(Self {
             resource,
-            relation: relation.into(),
+            relation,
             subject,
             optional_caveat: None,
-        }
+        })
     }
 
     /// Attaches a caveat to this relationship.
@@ -71,18 +87,20 @@ impl TryFrom<crate::proto::Relationship> for Relationship {
             .subject
             .ok_or_else(|| Error::Serialization("missing subject".into()))?
             .try_into()?;
-        let optional_caveat = proto.optional_caveat.map(|c| Caveat {
-            name: c.caveat_name,
-            context: c
-                .context
-                .map(|s| s.fields.into_iter().map(|(k, v)| (k, v.into())).collect())
-                .unwrap_or_default(),
-        });
-        Ok(Relationship {
-            resource,
-            relation: proto.relation,
-            subject,
-            optional_caveat,
+        let optional_caveat = proto
+            .optional_caveat
+            .map(|c| {
+                let context = c
+                    .context
+                    .map(|s| s.fields.into_iter().map(|(k, v)| (k, v.into())).collect())
+                    .unwrap_or_default();
+                Caveat::new(c.caveat_name, context)
+            })
+            .transpose()?;
+        let rel = Relationship::new(resource, proto.relation, subject)?;
+        Ok(match optional_caveat {
+            Some(c) => rel.with_caveat(c),
+            None => rel,
         })
     }
 }
@@ -259,7 +277,8 @@ mod tests {
                 None::<String>,
             )
             .unwrap(),
-        );
+        )
+        .unwrap();
         let update = RelationshipUpdate::create(rel);
         assert_eq!(update.operation, Operation::Create);
     }
@@ -275,15 +294,58 @@ mod tests {
             )
             .unwrap(),
         )
-        .with_caveat(Caveat::new("ip_check", HashMap::new()));
+        .unwrap()
+        .with_caveat(Caveat::new("ip_check", HashMap::new()).unwrap());
         assert!(rel.optional_caveat.is_some());
         assert_eq!(rel.optional_caveat.unwrap().name, "ip_check");
     }
 
     #[test]
+    fn relationship_empty_relation_rejected() {
+        let err = Relationship::new(
+            ObjectReference::new("doc", "1").unwrap(),
+            "",
+            SubjectReference::new(
+                ObjectReference::new("user", "alice").unwrap(),
+                None::<String>,
+            )
+            .unwrap(),
+        )
+        .unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn relationship_whitespace_relation_rejected() {
+        let err = Relationship::new(
+            ObjectReference::new("doc", "1").unwrap(),
+            "   ",
+            SubjectReference::new(
+                ObjectReference::new("user", "alice").unwrap(),
+                None::<String>,
+            )
+            .unwrap(),
+        )
+        .unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn caveat_empty_name_rejected() {
+        let err = Caveat::new("", HashMap::new()).unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn caveat_whitespace_name_rejected() {
+        let err = Caveat::new("  ", HashMap::new()).unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
+    }
+
+    #[test]
     fn precondition_must_exist() {
         use crate::types::RelationshipFilter;
-        let p = Precondition::must_exist(RelationshipFilter::new("document"));
+        let p = Precondition::must_exist(RelationshipFilter::new("document").unwrap());
         assert_eq!(p.operation, PreconditionOp::MustExist);
     }
 }

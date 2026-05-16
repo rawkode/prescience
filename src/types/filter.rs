@@ -7,24 +7,32 @@ use crate::types::{Relationship, ZedToken};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RelationshipFilter {
     /// Resource type to filter on.
-    pub resource_type: String,
+    resource_type: String,
     /// Optional resource ID.
-    pub optional_resource_id: Option<String>,
+    optional_resource_id: Option<String>,
     /// Optional relation name.
-    pub optional_relation: Option<String>,
+    optional_relation: Option<String>,
     /// Optional subject filter.
-    pub optional_subject_filter: Option<SubjectFilter>,
+    optional_subject_filter: Option<SubjectFilter>,
 }
 
 impl RelationshipFilter {
     /// Creates a new filter for the given resource type.
-    pub fn new(resource_type: impl Into<String>) -> Self {
-        Self {
-            resource_type: resource_type.into(),
+    ///
+    /// Returns `Err` if `resource_type` is empty or whitespace-only.
+    pub fn new(resource_type: impl Into<String>) -> Result<Self, Error> {
+        let resource_type = resource_type.into();
+        if resource_type.trim().is_empty() {
+            return Err(Error::InvalidArgument(
+                "resource_type must not be empty".into(),
+            ));
+        }
+        Ok(Self {
+            resource_type,
             optional_resource_id: None,
             optional_relation: None,
             optional_subject_filter: None,
-        }
+        })
     }
 
     /// Adds a resource ID filter.
@@ -44,6 +52,26 @@ impl RelationshipFilter {
         self.optional_subject_filter = Some(filter);
         self
     }
+
+    /// Returns the resource type.
+    pub fn resource_type(&self) -> &str {
+        &self.resource_type
+    }
+
+    /// Returns the optional resource ID filter.
+    pub fn resource_id_filter(&self) -> Option<&str> {
+        self.optional_resource_id.as_deref()
+    }
+
+    /// Returns the optional relation filter.
+    pub fn relation_filter(&self) -> Option<&str> {
+        self.optional_relation.as_deref()
+    }
+
+    /// Returns the optional subject filter.
+    pub fn subject_filter_ref(&self) -> Option<&SubjectFilter> {
+        self.optional_subject_filter.as_ref()
+    }
 }
 
 impl From<&RelationshipFilter> for crate::proto::RelationshipFilter {
@@ -62,21 +90,29 @@ impl From<&RelationshipFilter> for crate::proto::RelationshipFilter {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SubjectFilter {
     /// The subject object type.
-    pub subject_type: String,
+    subject_type: String,
     /// Optional subject object ID.
-    pub optional_subject_id: Option<String>,
+    optional_subject_id: Option<String>,
     /// Optional relation on the subject.
-    pub optional_relation: Option<String>,
+    optional_relation: Option<String>,
 }
 
 impl SubjectFilter {
     /// Creates a new subject filter for the given type.
-    pub fn new(subject_type: impl Into<String>) -> Self {
-        Self {
-            subject_type: subject_type.into(),
+    ///
+    /// Returns `Err` if `subject_type` is empty or whitespace-only.
+    pub fn new(subject_type: impl Into<String>) -> Result<Self, Error> {
+        let subject_type = subject_type.into();
+        if subject_type.trim().is_empty() {
+            return Err(Error::InvalidArgument(
+                "subject_type must not be empty".into(),
+            ));
+        }
+        Ok(Self {
+            subject_type,
             optional_subject_id: None,
             optional_relation: None,
-        }
+        })
     }
 
     /// Adds a subject ID filter.
@@ -89,6 +125,21 @@ impl SubjectFilter {
     pub fn relation(mut self, relation: impl Into<String>) -> Self {
         self.optional_relation = Some(relation.into());
         self
+    }
+
+    /// Returns the subject type.
+    pub fn subject_type(&self) -> &str {
+        &self.subject_type
+    }
+
+    /// Returns the optional subject ID filter.
+    pub fn subject_id_filter(&self) -> Option<&str> {
+        self.optional_subject_id.as_deref()
+    }
+
+    /// Returns the optional relation filter on the subject.
+    pub fn relation_filter(&self) -> Option<&str> {
+        self.optional_relation.as_deref()
     }
 }
 
@@ -131,5 +182,46 @@ impl ReadRelationshipResult {
             relationship,
             read_at,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relationship_filter_valid() {
+        let f = RelationshipFilter::new("document").unwrap();
+        assert_eq!(f.resource_type(), "document");
+    }
+
+    #[test]
+    fn relationship_filter_empty_type_rejected() {
+        let err = RelationshipFilter::new("").unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn relationship_filter_whitespace_type_rejected() {
+        let err = RelationshipFilter::new("   ").unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn subject_filter_valid() {
+        let f = SubjectFilter::new("user").unwrap();
+        assert_eq!(f.subject_type(), "user");
+    }
+
+    #[test]
+    fn subject_filter_empty_type_rejected() {
+        let err = SubjectFilter::new("").unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn subject_filter_whitespace_type_rejected() {
+        let err = SubjectFilter::new("  ").unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(_)));
     }
 }
